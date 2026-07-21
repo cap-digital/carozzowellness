@@ -3,25 +3,86 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Surfaces */
+  --page: #f1efe4;
+  --surface-1: #fdfcf8; /* card surface */
+  --surface-2: #f7f5ec;
+  /* Ink */
+  --text-primary: #232a1c;
+  --text-secondary: #5f5d52;
+  --text-muted: #97958a;
+  /* Chrome */
+  --brand: #465907;
+  --brand-deep: #324420;
+  --gold: #b08a3e;
+  --wine: #942143;
+  /* Chart chrome */
+  --grid: #e6e3d6;
+  --axis: #cfccbc;
+  --border: rgba(35, 42, 28, 0.1);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--text-primary);
+  background: var(--page);
+  font-family: var(--font-plex), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Warm, subtle scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #d7d3c2;
+  border-radius: 8px;
+  border: 2px solid var(--page);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #c3bfad;
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+  /* Recharts polish: recessive grid, no focus outline box */
+  .recharts-cartesian-grid line {
+    stroke: var(--grid);
+  }
+  .recharts-surface:focus,
+  .recharts-wrapper:focus {
+    outline: none;
+  }
+  .recharts-default-tooltip {
+    border-radius: 12px !important;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Soft grain/texture backdrop for the page plane */
+.page-grain {
+  background-image: radial-gradient(
+      circle at 1px 1px,
+      rgba(70, 89, 7, 0.04) 1px,
+      transparent 0
+    );
+  background-size: 22px 22px;
 }

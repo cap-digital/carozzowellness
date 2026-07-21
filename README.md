@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Carozzo Wellness · Media Dashboard
 
-## Getting Started
+Painel de performance de mídia digital do empreendimento **Carozzo Wellness** —
+o primeiro frente-mar de Salvador com conceito Wellness Premium (Jardim Armação).
 
-First, run the development server:
+Construído em **Next.js 14 (App Router)** + **Tailwind** + **Recharts**, com
+identidade visual extraída do site oficial (verde-oliva, creme, vinho, dourado;
+tipografia Fraunces + IBM Plex Sans).
+
+## Rodar
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev      # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Build de produção:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run build && npm run start
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Todas as rotas são reais (App Router), então F5 em qualquer página funciona sem 404.
 
-## Learn More
+## Estrutura
 
-To learn more about Next.js, take a look at the following resources:
+- `app/` — rotas (uma pasta por página)
+  - `/` Visão geral · `/plataformas/{meta,google,youtube,programatica}` ·
+    `/criativos` · `/publico` · `/campanhas` · `/custos`
+  - `app/api/meta/route.ts` — proxy server-side da função Supabase (esconde a key,
+    cacheia a resposta). Único ponto que fala com a fonte de dados.
+- `lib/` — `metrics.ts` (parsing + cálculo de custos e taxas), `aggregate.ts`
+  (agregações por objetivo/formato/placement/dia/demografia), `theme.ts`
+  (paleta de gráficos validada), `format.ts` (formatação pt-BR).
+- `components/` — `shell/` (sidebar, topbar, layout responsivo), `ui/` (cards,
+  KPI, tabela, filtros), `charts/` (funil, heatmap, pirâmide, donut, tooltip).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Fonte de dados
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Função Supabase `CarozzoWellness` (POST). Retorna `meta[]` (1.272 linhas,
+Facebook/Instagram) e arrays vazios para `google`, `youtube`, `programatica` —
+essas plataformas ainda não têm dados e aparecem como "Em breve".
 
-## Deploy on Vercel
+## Custos e taxas
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+A página **Custos & Taxas** calcula o investimento total a partir da mídia,
+aplicando **taxa de gestão** e **impostos** configuráveis (padrão: gestão 15%,
+impostos 0% — ajuste conforme o contrato real). Os cartões e tabelas mostram os
+custos por resultado tanto em "só mídia" quanto no valor "efetivo" com taxas.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Métricas derivadas ("taxas") calculadas: CPM, CPC, CTR, frequência, taxa de
+engajamento, CPL, custo por conversa, custo por clique de WhatsApp, CPV, VTR,
+hook rate, retenção de vídeo e taxa de conversão.
