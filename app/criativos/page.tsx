@@ -25,9 +25,10 @@ import { Badge } from "@/components/ui/Badge";
 import { makeTooltip, TipShell } from "@/components/charts/ChartTooltip";
 import { sum } from "@/lib/metrics";
 import { adBreakdown, formatBreakdown } from "@/lib/aggregate";
-import { brl, int, pct, compact } from "@/lib/format";
+import { brl, int, pct, compact, resultNum } from "@/lib/format";
 import { CHART, FORMAT_COLOR } from "@/lib/theme";
-import { ExternalLink, Film, Images as ImagesIcon, ImageIcon, LayoutGrid, Play } from "lucide-react";
+import { CreativeThumb } from "@/components/ui/CreativeThumb";
+import { ExternalLink, Film, Images as ImagesIcon, ImageIcon, LayoutGrid } from "lucide-react";
 
 function fmtIcon(format: string, size = 16) {
   if (format === "Carrossel") return <LayoutGrid size={size} />;
@@ -87,9 +88,7 @@ function Criativos() {
       if (sortKey === "spend") return b.totals.spend - a.totals.spend;
       if (sortKey === "impressions") return b.totals.impressions - a.totals.impressions;
       if (sortKey === "ctr") return b.derived.ctrLink - a.derived.ctrLink;
-      const cA = a.totals.whatsapp + a.totals.leads + a.totals.conversations;
-      const cB = b.totals.whatsapp + b.totals.leads + b.totals.conversations;
-      return cB - cA;
+      return b.primaryValue - a.primaryValue;
     });
     return arr;
   }, [creatives, sortKey]);
@@ -259,19 +258,15 @@ function Criativos() {
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {sorted.map((c, i) => {
-            const conv = c.totals.whatsapp + c.totals.leads + c.totals.conversations;
             const color = FORMAT_COLOR[c.format] ?? "#888";
-            const isVideo = c.format.startsWith("Animação");
             return (
               <Card key={c.ad} className="group overflow-hidden">
-                <div className="relative flex h-28 items-center justify-center overflow-hidden" style={{ background: `linear-gradient(135deg, ${color}22, ${color}0a)` }}>
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--surface-1)] shadow-card" style={{ color }}>
-                    {isVideo ? <Play size={20} /> : fmtIcon(c.format, 20)}
-                  </div>
+                <div className="relative">
+                  <CreativeThumb thumb={c.thumb} format={c.format} color={color} className="h-36 w-full" iconSize={20} alt={c.ad} href={c.permalink || undefined} />
                   <span className="absolute left-3 top-3">
                     <Badge color={color}>{c.format}</Badge>
                   </span>
-                  <span className="absolute right-3 top-3 rounded-full bg-[var(--surface-1)]/80 px-1.5 py-0.5 text-[10px] font-semibold text-[var(--text-muted)]">
+                  <span className="absolute right-3 top-3 rounded-full bg-[var(--surface-1)]/85 px-1.5 py-0.5 text-[10px] font-semibold text-[var(--text-muted)] backdrop-blur-sm">
                     #{i + 1}
                   </span>
                 </div>
@@ -285,7 +280,7 @@ function Criativos() {
                     <Metric label="Impressões" value={compact(c.totals.impressions)} />
                     <Metric label="Cliques link" value={int(c.totals.linkClicks)} />
                     <Metric label="CPC" value={brl(c.derived.cpcLink)} />
-                    <Metric label="Conversões" value={int(conv)} accent={color} />
+                    <Metric label={c.primary?.short ?? "Resultado"} value={resultNum(c.primaryValue)} accent={color} />
                   </div>
                   {c.permalink && (
                     <a

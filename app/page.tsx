@@ -1,12 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   ComposedChart,
   Bar,
   Line,
   Area,
-  AreaChart,
   BarChart,
   XAxis,
   YAxis,
@@ -22,12 +21,41 @@ import { ChartCard, SectionTitle } from "@/components/ui/Card";
 import { Kpi } from "@/components/ui/Kpi";
 import { Donut } from "@/components/charts/Donut";
 import { Funnel } from "@/components/charts/Funnel";
-import { makeTooltip } from "@/components/charts/ChartTooltip";
+import { Dropdown } from "@/components/ui/Dropdown";
+import { makeTooltip, TipShell } from "@/components/charts/ChartTooltip";
 import { sum, derive } from "@/lib/metrics";
-import { dailySeries, objectiveBreakdown } from "@/lib/aggregate";
+import { dailySeries, objectiveBreakdown, totalConversions } from "@/lib/aggregate";
 import { brl, int, compact, compactBRL, pct, shortDate } from "@/lib/format";
 import { CHART } from "@/lib/theme";
 import { Eye, Users, MousePointerClick, Target } from "lucide-react";
+
+// Selectable metrics for the daily comparison chart.
+type Kind = "money" | "int" | "pct";
+interface DeliveryMetric {
+  key: string;
+  label: string;
+  color: string;
+  kind: Kind;
+}
+const DELIVERY_METRICS: DeliveryMetric[] = [
+  { key: "impressions", label: "Impressões", color: "#2f80c4", kind: "int" },
+  { key: "reach", label: "Alcance", color: "#14a58c", kind: "int" },
+  { key: "clicks", label: "Cliques", color: "#5a8f22", kind: "int" },
+  { key: "linkClicks", label: "Cliques no link", color: "#e0a010", kind: "int" },
+  { key: "spend", label: "Investimento", color: "#465907", kind: "money" },
+  { key: "engagement", label: "Engajamento", color: "#8a63d4", kind: "int" },
+  { key: "videoViews", label: "Views de vídeo", color: "#cf3a5f", kind: "int" },
+  { key: "whatsapp", label: "Cliques WhatsApp", color: "#17a34a", kind: "int" },
+  { key: "conversations", label: "Conversas", color: "#e56a2b", kind: "int" },
+  { key: "leads", label: "Leads", color: "#d269a8", kind: "int" },
+  { key: "cpm", label: "CPM", color: "#8f6d29", kind: "money" },
+  { key: "ctr", label: "CTR", color: "#b08a3e", kind: "pct" },
+  { key: "cpc", label: "CPC", color: "#324420", kind: "money" },
+];
+const axisFmt = (m: DeliveryMetric) => (v: number) =>
+  m.kind === "money" ? compactBRL(v) : m.kind === "pct" ? `${v}%` : compact(v);
+const fullFmt = (m: DeliveryMetric, v: number) =>
+  m.kind === "money" ? brl(v) : m.kind === "pct" ? pct(v) : int(v);
 
 export default function OverviewPage() {
   return (
@@ -53,12 +81,13 @@ function Overview() {
     });
   }, [daily]);
 
-  const conversions = t.whatsapp + t.conversations + t.leads;
+  // Conversões = cada campanha contada pela sua métrica mãe (não uma soma genérica)
+  const conversions = useMemo(() => totalConversions(rows), [rows]);
+  const primaryOf = (key: string) => objectives.find((o) => o.key === key)?.primaryValue ?? 0;
   const spark = (k: keyof (typeof daily)[number]) => daily.map((p) => Number(p[k]));
 
   const funnelStages = [
     { label: "Impressões", value: t.impressions, color: "#2f80c4" },
-    { label: "Alcance", value: t.reach, color: "#14a58c" },
     { label: "Cliques", value: t.clicks, color: "#5a8f22" },
     { label: "Cliques no link", value: t.linkClicks, color: "#e0a010" },
     { label: "Conversões", value: conversions, color: "#cf3a5f" },
@@ -72,46 +101,39 @@ function Overview() {
     (label) => shortDate(String(label))
   );
 
-  const deliveryTip = makeTooltip(
-    (name, value) => ({
-      label: name === "impressions" ? "Impressões" : "Alcance",
-      value: int(value),
-      color: name === "impressions" ? "#2f80c4" : "#14a58c",
-    }),
-    (label) => shortDate(String(label))
-  );
+  // Selectable 2-metric daily comparison
+  const [metricA, setMetricA] = useState("impressions");
+  const [metricB, setMetricB] = useState("reach");
+  const mA = DELIVERY_METRICS.find((m) => m.key === metricA)!;
+  const mB = DELIVERY_METRICS.find((m) => m.key === metricB)!;
+  const sameMetric = metricA === metricB;
+
+  const deliveryTip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    const p = payload[0].payload;
+    const rows = [{ label: mA.label, value: fullFmt(mA, p[mA.key]), color: mA.color }];
+    if (!sameMetric) rows.push({ label: mB.label, value: fullFmt(mB, p[mB.key]), color: mB.color });
+    return <TipShell title={shortDate(String(label))} rows={rows} />;
+  };
 
   return (
     <div className="space-y-6">
       {/* Hero + KPIs */}
       <Reveal>
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-          <div className="xl:col-span-4 relative overflow-hidden rounded-2xl border border-[var(--border)] bg-gradient-to-br from-[#26331a] to-[#161f0d] p-5 text-[#f3f1e7] shadow-card">
-            <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-[#5a7020]/25 blur-2xl" />
+          <div className="xl:col-span-4 relative flex flex-col justify-center overflow-hidden rounded-2xl border border-[var(--border)] bg-gradient-to-br from-[#26331a] to-[#161f0d] p-6 text-[#f3f1e7] shadow-card">
+            <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-[#5a7020]/25 blur-2xl" />
             <div className="relative">
               <p className="text-[12px] font-medium uppercase tracking-[0.14em] text-[#c9a463]">
                 Investimento total em mídia
               </p>
-              <p className="mt-2 font-display text-[42px] font-semibold leading-none">
+              <p className="mt-3 font-display text-[46px] font-semibold leading-none">
                 {brl(t.spend)}
               </p>
-              <p className="mt-2 text-[12.5px] text-white/60">
-                {int(t.impressions)} impressões · {int(t.reach)} pessoas alcançadas
+              <p className="mt-3 text-[12.5px] text-white/55">
+                Média de {brl(t.spend / Math.max(daily.length, 1), 0)} por dia
+                {daily.length > 0 && ` · ${daily.length} dias`}
               </p>
-              <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-[12.5px]">
-                <div>
-                  <span className="text-white/50">CPM médio</span>
-                  <div className="font-semibold tnum">{brl(d.cpm)}</div>
-                </div>
-                <div>
-                  <span className="text-white/50">CTR</span>
-                  <div className="font-semibold tnum">{pct(d.ctr)}</div>
-                </div>
-                <div>
-                  <span className="text-white/50">Frequência</span>
-                  <div className="font-semibold tnum">{d.frequency.toFixed(2)}x</div>
-                </div>
-              </div>
             </div>
           </div>
 
@@ -143,7 +165,7 @@ function Overview() {
             <Kpi
               label="Conversões"
               value={int(conversions)}
-              sub={`${int(t.whatsapp)} WhatsApp · ${int(t.leads)} leads`}
+              sub={`${int(primaryOf("WHATSAPP"))} conversas · ${int(primaryOf("LEAD-ADS"))} leads`}
               color="#cf3a5f"
               icon={<Target size={14} />}
               spark={spark("clicks")}
@@ -281,24 +303,40 @@ function Overview() {
         </div>
       </Reveal>
 
-      {/* Delivery area */}
+      {/* Delivery — user picks 2 metrics */}
       <Reveal delay={180}>
         <ChartCard
-          title="Entrega diária: impressões e alcance"
-          subtitle="Volume de exibições versus pessoas únicas alcançadas"
-          accent="#2f80c4"
+          title="Entrega diária por métrica"
+          subtitle="Escolha duas métricas para comparar dia a dia"
+          accent={mA.color}
+          right={
+            <div className="flex flex-wrap items-center gap-2">
+              <Dropdown
+                size="sm"
+                swatch
+                options={DELIVERY_METRICS.map((m) => ({ value: m.key, label: m.label, color: m.color }))}
+                value={metricA}
+                onChange={setMetricA}
+              />
+              <span className="text-[12px] text-[var(--text-muted)]">vs</span>
+              <Dropdown
+                size="sm"
+                swatch
+                align="right"
+                options={DELIVERY_METRICS.map((m) => ({ value: m.key, label: m.label, color: m.color }))}
+                value={metricB}
+                onChange={setMetricB}
+              />
+            </div>
+          }
         >
-          <div style={{ height: 236 }}>
+          <div style={{ height: 250 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={daily} margin={{ top: 8, right: 8, left: 4, bottom: 0 }}>
+              <ComposedChart data={daily} margin={{ top: 10, right: 8, left: 4, bottom: 0 }}>
                 <defs>
-                  <linearGradient id="gImp" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#2f80c4" stopOpacity={0.22} />
-                    <stop offset="100%" stopColor="#2f80c4" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="gReach" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#14a58c" stopOpacity={0.22} />
-                    <stop offset="100%" stopColor="#14a58c" stopOpacity={0} />
+                  <linearGradient id="gMetricA" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={mA.color} stopOpacity={0.24} />
+                    <stop offset="100%" stopColor={mA.color} stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid vertical={false} stroke={CHART.grid} />
@@ -310,25 +348,61 @@ function Overview() {
                   axisLine={{ stroke: CHART.axis }}
                 />
                 <YAxis
-                  tickFormatter={compact}
-                  tick={{ fontSize: 11, fill: CHART.textMuted }}
+                  yAxisId="left"
+                  tickFormatter={axisFmt(mA)}
+                  tick={{ fontSize: 11, fill: mA.color }}
                   tickLine={false}
                   axisLine={false}
-                  width={44}
+                  width={52}
                 />
+                {!sameMetric && (
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    tickFormatter={axisFmt(mB)}
+                    tick={{ fontSize: 11, fill: mB.color }}
+                    tickLine={false}
+                    axisLine={false}
+                    width={52}
+                  />
+                )}
                 <Tooltip content={deliveryTip} />
-                <Area isAnimationActive={false} type="monotone" dataKey="impressions" stroke="#2f80c4" strokeWidth={2} fill="url(#gImp)" />
-                <Area isAnimationActive={false} type="monotone" dataKey="reach" stroke="#14a58c" strokeWidth={2} fill="url(#gReach)" />
-              </AreaChart>
+                <Area
+                  isAnimationActive={false}
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey={mA.key}
+                  stroke={mA.color}
+                  strokeWidth={2.5}
+                  fill="url(#gMetricA)"
+                  dot={false}
+                />
+                {!sameMetric && (
+                  <Line
+                    isAnimationActive={false}
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey={mB.key}
+                    stroke={mB.color}
+                    strokeWidth={2.5}
+                    dot={false}
+                    activeDot={{ r: 4, fill: mB.color, stroke: "var(--surface-1)", strokeWidth: 2 }}
+                  />
+                )}
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
-          <div className="mt-1 flex items-center gap-4 px-1 text-[11.5px] text-[var(--text-secondary)]">
+          <div className="mt-1 flex flex-wrap items-center gap-4 px-1 text-[11.5px] text-[var(--text-secondary)]">
             <span className="flex items-center gap-1.5">
-              <span className="h-[3px] w-3.5 rounded-full bg-[#2f80c4]" /> Impressões
+              <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: mA.color }} /> {mA.label}{" "}
+              <span className="text-[var(--text-muted)]">(área, esq.)</span>
             </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-[3px] w-3.5 rounded-full bg-[#14a58c]" /> Alcance
-            </span>
+            {!sameMetric && (
+              <span className="flex items-center gap-1.5">
+                <span className="h-[3px] w-3.5 rounded-full" style={{ background: mB.color }} /> {mB.label}{" "}
+                <span className="text-[var(--text-muted)]">(linha, dir.)</span>
+              </span>
+            )}
           </div>
         </ChartCard>
       </Reveal>

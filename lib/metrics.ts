@@ -72,7 +72,42 @@ export function normalize(r: MetaRow): Row {
     whatsapp: num(r.conversions_offsite_conversion_fb_pixel_custom_clique_botao_whatsapp),
     conversations: num(r.actions_onsite_conversion_messaging_conversation_started_7d),
     leads,
+    leadGrouped: num(r.actions_onsite_conversion_lead_grouped),
   };
+}
+
+// ---- "métrica mãe": each campaign objective has ONE primary result metric ----
+// The client measures each campaign by its objective's own KPI, never a blanket sum.
+export interface PrimaryDef {
+  field: "impressions" | "reach" | "videoViews" | "conversations" | "whatsapp" | "leadGrouped";
+  label: string; // full name, e.g. "Conversas iniciadas"
+  short: string; // compact name for tight spaces
+  costLabel: string; // e.g. "Custo por conversa"
+  isConversion: boolean; // bottom-funnel result (vs impressions/views)
+}
+
+// Reach/awareness strategy is measured by impressions (delivery volume).
+export const PRIMARY_BY_OBJECTIVE: Record<string, PrimaryDef> = {
+  ALCANCE: { field: "impressions", label: "Impressões", short: "Impressões", costLabel: "Custo por mil (CPM)", isConversion: false },
+  VIDEOVIEW: { field: "videoViews", label: "Views de vídeo", short: "Views", costLabel: "Custo por view (CPV)", isConversion: false },
+  WHATSAPP: { field: "conversations", label: "Conversas iniciadas", short: "Conversas", costLabel: "Custo por conversa", isConversion: true },
+  "CONVERSAO-LP": { field: "whatsapp", label: "Cliques no WhatsApp", short: "Cliques WhatsApp", costLabel: "Custo por clique WhatsApp", isConversion: true },
+  "LEAD-ADS": { field: "leadGrouped", label: "Leads", short: "Leads", costLabel: "Custo por lead", isConversion: true },
+};
+
+export function primaryDef(objective: string): PrimaryDef | undefined {
+  return PRIMARY_BY_OBJECTIVE[objective];
+}
+
+// Primary result value for an aggregated Totals given the campaign objective.
+export function primaryResult(objective: string, t: Totals): number {
+  const def = PRIMARY_BY_OBJECTIVE[objective];
+  return def ? (t[def.field] as number) : 0;
+}
+
+// Cost per primary result (R$). Returns 0 when no result.
+export function costPerPrimary(objective: string, t: Totals): number {
+  return div(t.spend, primaryResult(objective, t));
 }
 
 // ---- totals ----------------------------------------------------------------
@@ -80,7 +115,7 @@ export function emptyTotals(): Totals {
   return {
     spend: 0, clicks: 0, linkClicks: 0, impressions: 0, reach: 0, engagement: 0,
     videoViews: 0, thruplays: 0, p25: 0, p50: 0, p75: 0, p100: 0,
-    whatsapp: 0, conversations: 0, leads: 0, rows: 0,
+    whatsapp: 0, conversations: 0, leads: 0, leadGrouped: 0, rows: 0,
   };
 }
 
@@ -92,6 +127,7 @@ export function sum(rows: Row[]): Totals {
     t.videoViews += r.videoViews; t.thruplays += r.thruplays;
     t.p25 += r.p25; t.p50 += r.p50; t.p75 += r.p75; t.p100 += r.p100;
     t.whatsapp += r.whatsapp; t.conversations += r.conversations; t.leads += r.leads;
+    t.leadGrouped += r.leadGrouped;
     t.rows += 1;
   }
   return t;

@@ -4,12 +4,6 @@ import { useMemo } from "react";
 import {
   BarChart,
   Bar,
-  AreaChart,
-  Area,
-  RadarChart,
-  Radar,
-  PolarGrid,
-  PolarAngleAxis,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -24,12 +18,14 @@ import { ChartCard, SectionTitle, Card } from "@/components/ui/Card";
 import { DataTable, Column } from "@/components/ui/DataTable";
 import { Sparkline } from "@/components/ui/Sparkline";
 import { Badge } from "@/components/ui/Badge";
+import { Donut } from "@/components/charts/Donut";
+import { CreativeThumb } from "@/components/ui/CreativeThumb";
 import { makeTooltip } from "@/components/charts/ChartTooltip";
 import { sum, derive, groupSum, byDate } from "@/lib/metrics";
-import { objectiveBreakdown, placementBreakdown } from "@/lib/aggregate";
-import { brl, int, pct, compact, shortDate } from "@/lib/format";
-import { CHART, OBJECTIVE_COLOR } from "@/lib/theme";
-import { Aperture } from "lucide-react";
+import { objectiveBreakdown, placementBreakdown, adBreakdown, totalConversions } from "@/lib/aggregate";
+import { brl, int, pct, compact, compactBRL, resultNum, shortDate } from "@/lib/format";
+import { CHART, OBJECTIVE_COLOR, FORMAT_COLOR } from "@/lib/theme";
+import { Aperture, ExternalLink } from "lucide-react";
 
 export default function MetaPage() {
   return (
@@ -59,44 +55,10 @@ function Meta() {
     });
   }, [rows, objKeys]);
 
-  // Small multiples: spend trend per objective
-  const objTrends = useMemo(
-    () =>
-      objectives.map((o) => {
-        const series = byDate(o.rows).map((g) => g.totals.spend);
-        return { key: o.key, color: o.color, totals: o.totals, derived: o.derived, series };
-      }),
-    [objectives]
-  );
+  // Top 3 creatives by investment
+  const top3 = useMemo(() => adBreakdown(rows).slice(0, 3), [rows]);
 
-  // Radar: placement profiles, normalized 0-100
-  const radar = useMemo(() => {
-    const axes: { key: string; label: string; invert: boolean; raw?: boolean }[] = [
-      { key: "ctrLink", label: "CTR", invert: false },
-      { key: "engagementRate", label: "Engaj.", invert: false },
-      { key: "reach", label: "Alcance", invert: false, raw: true },
-      { key: "linkClicks", label: "Cliques", invert: false, raw: true },
-      { key: "cpm", label: "CPM baixo", invert: true },
-    ];
-    return axes.map((ax) => {
-      const rec: Record<string, number | string> = { axis: ax.label };
-      const vals = placements.map((p) =>
-        ax.raw ? (p.totals as any)[ax.key] : (p.derived as any)[ax.key]
-      );
-      const max = Math.max(...vals, 0.0001);
-      const min = Math.min(...vals);
-      placements.forEach((p, i) => {
-        const v = vals[i];
-        const score = ax.invert
-          ? max === min ? 100 : ((max - v) / (max - min)) * 100
-          : (v / max) * 100;
-        rec[p.key] = +score.toFixed(1);
-      });
-      return rec;
-    });
-  }, [placements]);
-
-  const conversions = t.whatsapp + t.conversations + t.leads;
+  const conversions = useMemo(() => totalConversions(rows), [rows]);
 
   const stackTip = makeTooltip(
     (name, value) => (value > 0 ? { label: name, value: brl(value), color: OBJECTIVE_COLOR[name] ?? "#888" } : null),
@@ -220,72 +182,74 @@ function Meta() {
         </ChartCard>
       </Reveal>
 
-      {/* Small multiples */}
-      <Reveal delay={120}>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
-          {objTrends.map((o) => (
-            <Card key={o.key} className="p-3.5">
-              <div className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full" style={{ background: o.color }} />
-                <span className="truncate text-[11.5px] font-semibold text-[var(--text-secondary)]">{o.key}</span>
-              </div>
-              <div className="mt-1 text-[19px] font-semibold tnum text-[var(--text-primary)]">{brl(o.totals.spend, 0)}</div>
-              <div className="mt-1.5 -mx-1 h-[38px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={o.series.map((v, i) => ({ i, v }))} margin={{ top: 2, right: 2, left: 2, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id={`sm-${o.key}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={o.color} stopOpacity={0.3} />
-                        <stop offset="100%" stopColor={o.color} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <Area isAnimationActive={false} type="monotone" dataKey="v" stroke={o.color} strokeWidth={1.8} fill={`url(#sm-${o.key})`} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="mt-1 flex items-center justify-between text-[11px] text-[var(--text-muted)]">
-                <span>CTR {pct(o.derived.ctrLink, 1)}</span>
-                <span>CPM {brl(o.derived.cpm, 0)}</span>
-              </div>
-            </Card>
-          ))}
-        </div>
+      {/* Top 3 creatives — compact ranked list with mini thumbnails */}
+      <Reveal delay={130}>
+        <SectionTitle hint="maiores investimentos, com miniatura e link para o post">Top 3 criativos</SectionTitle>
+        <Card className="px-4 py-1.5">
+          <ul className="divide-y divide-[var(--border)]">
+            {top3.map((c, i) => {
+              const color = FORMAT_COLOR[c.format] ?? "#888";
+              return (
+                <li key={c.ad} className="flex flex-wrap items-center gap-x-4 gap-y-3 py-3">
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <span
+                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[12px] font-bold"
+                      style={{ background: `${color}1f`, color }}
+                    >
+                      {i + 1}
+                    </span>
+                    <CreativeThumb
+                      thumb={c.thumb}
+                      format={c.format}
+                      color={color}
+                      className="h-14 w-14 shrink-0 rounded-lg"
+                      iconSize={16}
+                      alt={c.ad}
+                      href={c.permalink || undefined}
+                    />
+                    <div className="min-w-0">
+                      <div className="truncate text-[13.5px] font-semibold text-[var(--text-primary)]" title={c.ad}>
+                        {c.ad.replace(/ - Carozzo Wellness/i, "").replace(/^AD /, "AD ")}
+                      </div>
+                      <div className="text-[11.5px] text-[var(--text-muted)]">{c.format}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-5 sm:gap-8">
+                    <MiniStat label="Investido" value={brl(c.totals.spend, 0)} />
+                    <MiniStat label="CTR" value={pct(c.derived.ctrLink)} />
+                    <MiniStat label="Cliques" value={int(c.totals.linkClicks)} />
+                    <MiniStat label={c.primary?.short ?? "Resultado"} value={resultNum(c.primaryValue)} color={color} />
+                  </div>
+                  {c.permalink && (
+                    <a
+                      href={c.permalink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Ver no Instagram"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text-primary)]"
+                    >
+                      <ExternalLink size={15} />
+                    </a>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
       </Reveal>
 
-      {/* Radar + placement bars */}
-      <Reveal delay={160}>
+      {/* Placements: investment donut + clicks/CTR bars */}
+      <Reveal delay={200}>
         <SectionTitle hint="onde os anúncios são exibidos">Colocações (placements)</SectionTitle>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <ChartCard title="Perfil de desempenho por colocação" subtitle="Índice 0–100 relativo entre placements" accent="#8a63d4">
-            <div style={{ height: 264 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart data={radar} outerRadius="72%" margin={{ top: 8, right: 24, bottom: 8, left: 24 }}>
-                  <PolarGrid stroke={CHART.grid} />
-                  <PolarAngleAxis dataKey="axis" tick={{ fontSize: 11, fill: CHART.textSecondary }} />
-                  {placements.map((p) => (
-                    <Radar
-                      key={p.key}
-                      isAnimationActive={false}
-                      name={p.key}
-                      dataKey={p.key}
-                      stroke={p.color}
-                      fill={p.color}
-                      fillOpacity={0.12}
-                      strokeWidth={2}
-                    />
-                  ))}
-                  <Tooltip content={makeTooltip((n, v) => ({ label: n, value: `${v.toFixed(0)}/100`, color: placements.find((p) => p.key === n)?.color }))} />
-                </RadarChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="flex flex-wrap gap-x-4 gap-y-1 px-1 text-[11.5px] text-[var(--text-secondary)]">
-              {placements.map((p) => (
-                <span key={p.key} className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: p.color }} />
-                  {p.key}
-                </span>
-              ))}
-            </div>
+          <ChartCard title="Investimento por colocação" subtitle="Distribuição do orçamento entre placements" accent="#8a63d4">
+            <Donut
+              data={placements.map((p) => ({ name: p.key, value: p.totals.spend, color: p.color }))}
+              centerValue={compactBRL(t.spend)}
+              centerLabel="investido"
+              format={(v) => brl(v, 0)}
+              height={200}
+            />
           </ChartCard>
 
           <ChartCard title="Cliques no link e CTR por colocação" subtitle="Volume de cliques com a taxa de cliques ao lado" accent="#e0a010">
@@ -325,6 +289,17 @@ function Meta() {
           />
         </Card>
       </Reveal>
+    </div>
+  );
+}
+
+function MiniStat({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div className="text-right">
+      <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">{label}</div>
+      <div className="mt-0.5 text-[13px] font-semibold tnum" style={{ color: color ?? "var(--text-primary)" }}>
+        {value}
+      </div>
     </div>
   );
 }

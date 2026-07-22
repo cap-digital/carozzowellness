@@ -1,8 +1,13 @@
 import { Row } from "./types";
-import { sum, derive, groupSum, byDate } from "./metrics";
+import {
+  sum, derive, groupSum, byDate,
+  primaryDef, primaryResult, costPerPrimary, PRIMARY_BY_OBJECTIVE,
+} from "./metrics";
 import { OBJECTIVE_COLOR, FORMAT_COLOR, SERIES } from "./theme";
 
 // Objective ("ID3 ... [ALCANCE]") breakdown, sorted by spend desc.
+// Carries the campaign's "métrica mãe" (primary result) — the KPI its objective
+// is optimized for — instead of a blanket conversion sum.
 export function objectiveBreakdown(rows: Row[]) {
   return groupSum(rows, (r) => r.objective)
     .map((g, i) => ({
@@ -11,8 +16,19 @@ export function objectiveBreakdown(rows: Row[]) {
       derived: derive(g.totals),
       rows: g.rows,
       color: OBJECTIVE_COLOR[g.key] ?? SERIES[i % SERIES.length],
+      primary: primaryDef(g.key),
+      primaryValue: primaryResult(g.key, g.totals),
+      costPerResult: costPerPrimary(g.key, g.totals),
     }))
     .sort((a, b) => b.totals.spend - a.totals.spend);
+}
+
+// Bottom-funnel conversions = each conversion campaign counted by ITS métrica mãe.
+export function totalConversions(rows: Row[]): number {
+  return groupSum(rows, (r) => r.objective).reduce((s, g) => {
+    const def = PRIMARY_BY_OBJECTIVE[g.key];
+    return def && def.isConversion ? s + primaryResult(g.key, g.totals) : s;
+  }, 0);
 }
 
 export function formatBreakdown(rows: Row[]) {
@@ -46,14 +62,18 @@ export function adBreakdown(rows: Row[]) {
     .map((g) => {
       const withThumb = g.rows.find((r) => r.thumb);
       const withLink = g.rows.find((r) => r.permalink);
+      const objective = g.rows[0]?.objective ?? "";
       return {
         ad: g.key,
         format: g.rows[0]?.format ?? "Outro",
-        objective: g.rows[0]?.objective ?? "",
+        objective,
         thumb: withThumb?.thumb ?? "",
         permalink: withLink?.permalink ?? "",
         totals: g.totals,
         derived: derive(g.totals),
+        primary: primaryDef(objective),
+        primaryValue: primaryResult(objective, g.totals),
+        costPerResult: costPerPrimary(objective, g.totals),
       };
     })
     .sort((a, b) => b.totals.spend - a.totals.spend);

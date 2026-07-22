@@ -28,6 +28,9 @@ export const compact = (n: number) => {
   return int(v);
 };
 
+// Result/KPI counts: compact when large (e.g. impressions), plain int otherwise.
+export const resultNum = (n: number) => (Math.abs(n) >= 100000 ? compact(n) : int(n));
+
 export const compactBRL = (n: number) => {
   const v = isFinite(n) ? n : 0;
   if (Math.abs(v) >= 1_000_000) return `R$ ${dec(v / 1_000_000, 1)} mi`;

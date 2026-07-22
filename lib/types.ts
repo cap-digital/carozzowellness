@@ -64,6 +64,7 @@ export interface Row {
   whatsapp: number;
   conversations: number;
   leads: number;
+  leadGrouped: number;
 }
 
 export interface Totals {
@@ -82,5 +83,6 @@ export interface Totals {
   whatsapp: number;
   conversations: number;
   leads: number;
+  leadGrouped: number;
   rows: number;
 }
