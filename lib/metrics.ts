@@ -122,15 +122,14 @@ export const CONVERSION_METRICS: ConversionMetric[] = [
   { key: "leadGrouped", label: "Leads Formulário", short: "Leads Form.", color: "#cf3a5f", costLabel: "Custo por Lead Formulário" },
 ];
 
-// Cost (R$) of one unit of a conversion action — spend ÷ count.
-export function convCost(t: Totals, key: ConversionKey): number {
-  return div(t.spend, t[key]);
-}
-
-// Rate (%) of a conversion action relative to link clicks.
-export function convRate(t: Totals, key: ConversionKey): number {
-  return div(t[key], t.linkClicks) * 100;
-}
+// Which campaign strategy (objective) OWNS each conversion action. Cost/rate must
+// be computed from that strategy's OWN spend & clicks — never the global total,
+// which would inflate the cost. See `conversionStats()` in aggregate.ts.
+export const CONVERSION_OBJECTIVE: Record<ConversionKey, string> = {
+  conversations: "WHATSAPP",
+  whatsapp: "CONVERSAO-LP",
+  leadGrouped: "LEAD-ADS",
+};
 
 // Primary result value for an aggregated Totals given the campaign objective.
 export function primaryResult(objective: string, t: Totals): number {

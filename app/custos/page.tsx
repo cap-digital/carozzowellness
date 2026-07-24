@@ -20,8 +20,8 @@ import { ChartCard, SectionTitle, Card } from "@/components/ui/Card";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { DataTable, Column } from "@/components/ui/DataTable";
 import { makeTooltip, TipShell } from "@/components/charts/ChartTooltip";
-import { sum, derive, byDate, convCost } from "@/lib/metrics";
-import { objectiveBreakdown } from "@/lib/aggregate";
+import { sum, derive, byDate } from "@/lib/metrics";
+import { objectiveBreakdown, conversionStats } from "@/lib/aggregate";
 import { brl, pct, dec, compactBRL, shortDate } from "@/lib/format";
 import { CHART } from "@/lib/theme";
 
@@ -65,6 +65,11 @@ function Custos() {
   const t = useMemo(() => sum(rows), [rows]);
   const d = useMemo(() => derive(t), [t]);
   const objectives = useMemo(() => objectiveBreakdown(rows), [rows]);
+  // Cost per conversion action, each from its OWN campaign strategy's spend.
+  const cs = useMemo(() => {
+    const m = new Map(conversionStats(rows).map((s) => [s.key, s]));
+    return { conversations: m.get("conversations")!, whatsapp: m.get("whatsapp")!, leadGrouped: m.get("leadGrouped")! };
+  }, [rows]);
 
   const [trendKey, setTrendKey] = useState("cpm");
   const [objKey, setObjKey] = useState("cpm");
@@ -111,9 +116,9 @@ function Custos() {
   // one per strategy, kept separate (never a blended "custo por conversão")
   const secondary = [
     { l: "Frequência", v: `${dec(d.frequency, 2)}x`, color: "#8a63d4" },
-    { l: "Custo / WhatsApp", v: brl(d.cpConversation), color: "#5a8f22" },
-    { l: "Custo / Lead LP", v: brl(d.cpWhatsapp), color: "#e0a010" },
-    { l: "Custo / Lead Formulário", v: brl(convCost(t, "leadGrouped")), color: "#cf3a5f" },
+    { l: "Custo / WhatsApp", v: brl(cs.conversations.cost), color: "#5a8f22" },
+    { l: "Custo / Lead LP", v: brl(cs.whatsapp.cost), color: "#e0a010" },
+    { l: "Custo / Lead Formulário", v: brl(cs.leadGrouped.cost), color: "#cf3a5f" },
   ];
 
   // Table by objective

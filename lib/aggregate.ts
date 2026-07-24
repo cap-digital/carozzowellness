@@ -2,8 +2,36 @@ import { Row } from "./types";
 import {
   sum, derive, groupSum, byDate,
   primaryDef, primaryResult, costPerPrimary,
+  CONVERSION_METRICS, CONVERSION_OBJECTIVE, type ConversionMetric,
 } from "./metrics";
 import { OBJECTIVE_COLOR, FORMAT_COLOR, SERIES } from "./theme";
+
+// Per-conversion-action stats, each computed from ITS OWN campaign strategy —
+// count, spend, cost (spend ÷ count) and rate (count ÷ link clicks). Using the
+// owning campaign's spend (not the global total) is what makes the cost correct.
+export interface ConversionStat extends ConversionMetric {
+  count: number;
+  spend: number;
+  cost: number;
+  rate: number;
+}
+
+export function conversionStats(rows: Row[]): ConversionStat[] {
+  const byObj = new Map(groupSum(rows, (r) => r.objective).map((g) => [g.key, g.totals]));
+  return CONVERSION_METRICS.map((m) => {
+    const t = byObj.get(CONVERSION_OBJECTIVE[m.key]);
+    const count = t ? (t[m.key] as number) : 0;
+    const spend = t ? t.spend : 0;
+    const clicks = t ? t.linkClicks : 0;
+    return {
+      ...m,
+      count,
+      spend,
+      cost: count > 0 ? spend / count : 0,
+      rate: clicks > 0 ? (count / clicks) * 100 : 0,
+    };
+  });
+}
 
 // Objective ("ID3 ... [ALCANCE]") breakdown, sorted by spend desc.
 // Carries the campaign's "métrica mãe" (primary result) — the KPI its objective

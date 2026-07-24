@@ -24,7 +24,7 @@ import { Donut } from "@/components/charts/Donut";
 import { ConversionStats } from "@/components/ui/ConversionStats";
 import { CreativeThumb } from "@/components/ui/CreativeThumb";
 import { makeTooltip } from "@/components/charts/ChartTooltip";
-import { sum, derive, groupSum, byDate, CONVERSION_METRICS } from "@/lib/metrics";
+import { sum, derive, groupSum, byDate, CONVERSION_METRICS, CONVERSION_OBJECTIVE } from "@/lib/metrics";
 import { objectiveBreakdown, placementBreakdown, adBreakdown } from "@/lib/aggregate";
 import { brl, int, pct, compact, compactBRL, resultNum, shortDate } from "@/lib/format";
 import { CHART, OBJECTIVE_COLOR, FORMAT_COLOR } from "@/lib/theme";
@@ -61,15 +61,19 @@ function Meta() {
   // Top 3 creatives by investment
   const top3 = useMemo(() => adBreakdown(rows).slice(0, 3), [rows]);
 
-  // Daily series for each conversion action — kept SEPARATE (never summed).
+  // Daily series for each conversion action — kept SEPARATE (never summed), and
+  // each counted only within its OWN campaign strategy (its métrica mãe).
   const convDaily = useMemo(
     () =>
-      byDate(rows).map((g) => ({
-        date: g.key,
-        conversations: g.totals.conversations,
-        whatsapp: g.totals.whatsapp,
-        leadGrouped: g.totals.leadGrouped,
-      })),
+      byDate(rows).map((g) => {
+        const rec: Record<string, number | string> = { date: g.key, conversations: 0, whatsapp: 0, leadGrouped: 0 };
+        for (const r of g.rows) {
+          for (const m of CONVERSION_METRICS) {
+            if (r.objective === CONVERSION_OBJECTIVE[m.key]) rec[m.key] = (rec[m.key] as number) + r[m.key];
+          }
+        }
+        return rec;
+      }),
     [rows]
   );
 
@@ -176,7 +180,7 @@ function Meta() {
         <SectionTitle hint="cada ação de conversão com sua contagem, custo e taxa — nunca somadas">
           Conversões por tipo
         </SectionTitle>
-        <ConversionStats totals={t} />
+        <ConversionStats rows={rows} />
       </Reveal>
 
       {/* Line chart: daily evolution of each conversion action */}

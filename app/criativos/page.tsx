@@ -26,7 +26,7 @@ import { makeTooltip, TipShell } from "@/components/charts/ChartTooltip";
 import { sum } from "@/lib/metrics";
 import { adBreakdown, formatBreakdown } from "@/lib/aggregate";
 import { brl, int, pct, compact, resultNum } from "@/lib/format";
-import { CHART, FORMAT_COLOR } from "@/lib/theme";
+import { CHART, FORMAT_COLOR, OBJECTIVE_COLOR } from "@/lib/theme";
 import { CreativeThumb } from "@/components/ui/CreativeThumb";
 import { ExternalLink, Film, Images as ImagesIcon, ImageIcon, LayoutGrid } from "lucide-react";
 
@@ -94,6 +94,27 @@ function Criativos() {
   }, [creatives, sortKey]);
 
   const bestCtr = [...creatives].sort((a, b) => b.derived.ctrLink - a.derived.ctrLink)[0];
+
+  // When sorting by "Resultado", split the gallery into sections per objective so
+  // it's clear which result (métrica mãe) each creative is measured by.
+  const groups = useMemo(() => {
+    const map = new Map<string, Creative[]>();
+    for (const c of creatives) {
+      const arr = map.get(c.objective);
+      if (arr) arr.push(c);
+      else map.set(c.objective, [c]);
+    }
+    return [...map.entries()]
+      .map(([objective, items]) => ({
+        objective,
+        color: OBJECTIVE_COLOR[objective] ?? "#888",
+        primary: items[0]?.primary,
+        items: [...items].sort((a, b) => b.primaryValue - a.primaryValue),
+        totalResult: items.reduce((s, c) => s + c.primaryValue, 0),
+        totalSpend: items.reduce((s, c) => s + c.totals.spend, 0),
+      }))
+      .sort((a, b) => b.totalSpend - a.totalSpend);
+  }, [creatives]);
 
   return (
     <div className="space-y-6">
@@ -256,49 +277,79 @@ function Criativos() {
             ]}
           />
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {sorted.map((c, i) => {
-            const color = FORMAT_COLOR[c.format] ?? "#888";
-            return (
-              <Card key={c.ad} className="group overflow-hidden">
-                <div className="relative">
-                  <CreativeThumb thumb={c.thumb} format={c.format} color={color} className="h-36 w-full" iconSize={20} alt={c.ad} href={c.permalink || undefined} />
-                  <span className="absolute left-3 top-3">
-                    <Badge color={color}>{c.format}</Badge>
+        {sortKey === "conv" ? (
+          <div className="space-y-7">
+            {groups.map((g) => (
+              <div key={g.objective}>
+                <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-[var(--border)] pb-2">
+                  <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: g.color }} />
+                  <h3 className="text-[14px] font-semibold text-[var(--text-primary)]">{g.objective}</h3>
+                  <span className="text-[12px] text-[var(--text-muted)]">
+                    resultado medido por {g.primary?.label ?? "—"} · {g.items.length} criativo{g.items.length > 1 ? "s" : ""}
                   </span>
-                  <span className="absolute right-3 top-3 rounded-full bg-[var(--surface-1)]/85 px-1.5 py-0.5 text-[10px] font-semibold text-[var(--text-muted)] backdrop-blur-sm">
-                    #{i + 1}
+                  <span className="ml-auto text-[13px] font-semibold tnum" style={{ color: g.color }}>
+                    {resultNum(g.totalResult)} {g.primary?.short ?? ""}
                   </span>
                 </div>
-                <div className="p-3.5">
-                  <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]" title={c.ad}>
-                    {c.ad.replace(/ - Carozzo Wellness/i, "")}
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-[12px]">
-                    <Metric label="Investido" value={brl(c.totals.spend, 0)} />
-                    <Metric label="CTR" value={pct(c.derived.ctrLink)} />
-                    <Metric label="Impressões" value={compact(c.totals.impressions)} />
-                    <Metric label="Cliques link" value={int(c.totals.linkClicks)} />
-                    <Metric label="CPC" value={brl(c.derived.cpcLink)} />
-                    <Metric label={c.primary?.short ?? "Resultado"} value={resultNum(c.primaryValue)} accent={color} />
-                  </div>
-                  {c.permalink && (
-                    <a
-                      href={c.permalink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-                    >
-                      <ExternalLink size={13} /> Ver no Instagram
-                    </a>
-                  )}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {g.items.map((c, i) => (
+                    <CreativeCard key={c.ad} c={c} index={i} />
+                  ))}
                 </div>
-              </Card>
-            );
-          })}
-        </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {sorted.map((c, i) => (
+              <CreativeCard key={c.ad} c={c} index={i} />
+            ))}
+          </div>
+        )}
       </Reveal>
     </div>
+  );
+}
+
+type Creative = ReturnType<typeof adBreakdown>[number];
+
+function CreativeCard({ c, index }: { c: Creative; index: number }) {
+  const color = FORMAT_COLOR[c.format] ?? "#888";
+  return (
+    <Card className="group overflow-hidden">
+      <div className="relative">
+        <CreativeThumb thumb={c.thumb} format={c.format} color={color} className="h-36 w-full" iconSize={20} alt={c.ad} href={c.permalink || undefined} />
+        <span className="absolute left-3 top-3">
+          <Badge color={color}>{c.format}</Badge>
+        </span>
+        <span className="absolute right-3 top-3 rounded-full bg-[var(--surface-1)]/85 px-1.5 py-0.5 text-[10px] font-semibold text-[var(--text-muted)] backdrop-blur-sm">
+          #{index + 1}
+        </span>
+      </div>
+      <div className="p-3.5">
+        <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]" title={c.ad}>
+          {c.ad.replace(/ - Carozzo Wellness/i, "")}
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-[12px]">
+          <Metric label="Investido" value={brl(c.totals.spend, 0)} />
+          <Metric label="CTR" value={pct(c.derived.ctrLink)} />
+          <Metric label="Impressões" value={compact(c.totals.impressions)} />
+          <Metric label="Cliques link" value={int(c.totals.linkClicks)} />
+          <Metric label="CPC" value={brl(c.derived.cpcLink)} />
+          <Metric label={c.primary?.short ?? "Resultado"} value={resultNum(c.primaryValue)} accent={color} />
+        </div>
+        {c.permalink && (
+          <a
+            href={c.permalink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+          >
+            <ExternalLink size={13} /> Ver no Instagram
+          </a>
+        )}
+      </div>
+    </Card>
   );
 }
 

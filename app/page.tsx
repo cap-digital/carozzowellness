@@ -23,8 +23,8 @@ import { Donut } from "@/components/charts/Donut";
 import { Funnel } from "@/components/charts/Funnel";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { makeTooltip, TipShell } from "@/components/charts/ChartTooltip";
-import { sum, derive, CONVERSION_METRICS } from "@/lib/metrics";
-import { dailySeries, objectiveBreakdown } from "@/lib/aggregate";
+import { sum, derive } from "@/lib/metrics";
+import { dailySeries, objectiveBreakdown, conversionStats } from "@/lib/aggregate";
 import { brl, int, compact, compactBRL, pct, shortDate } from "@/lib/format";
 import { CHART } from "@/lib/theme";
 import { Eye, Users, MousePointerClick } from "lucide-react";
@@ -72,6 +72,7 @@ function Overview() {
   const d = useMemo(() => derive(t), [t]);
   const daily = useMemo(() => dailySeries(rows), [rows]);
   const objectives = useMemo(() => objectiveBreakdown(rows), [rows]);
+  const convStats = useMemo(() => conversionStats(rows), [rows]);
 
   const cumulative = useMemo(() => {
     let acc = 0;
@@ -166,12 +167,12 @@ function Overview() {
                 <span className="truncate">Conversões por tipo</span>
               </div>
               <div className="mt-2 space-y-1.5 pl-2">
-                {CONVERSION_METRICS.map((m) => (
+                {convStats.map((m) => (
                   <div key={m.key} className="flex items-center gap-2">
                     <span className="h-2 w-2 shrink-0 rounded-[2px]" style={{ background: m.color }} />
                     <span className="truncate text-[11.5px] text-[var(--text-muted)]">{m.short}</span>
                     <span className="ml-auto text-[14px] font-semibold tnum text-[var(--text-primary)]">
-                      {int(t[m.key])}
+                      {int(m.count)}
                     </span>
                   </div>
                 ))}
