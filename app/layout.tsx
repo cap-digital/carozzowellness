@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Sans, Fraunces } from "next/font/google";
+import { Inter, Fraunces } from "next/font/google";
 import "./globals.css";
 import { Shell } from "@/components/shell/Shell";
 
-const plex = IBM_Plex_Sans({
+const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
-  variable: "--font-plex",
+  variable: "--font-inter",
   display: "swap",
 });
 
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR">
-      <body className={`${plex.variable} ${fraunces.variable} antialiased`}>
+      <body className={`${inter.variable} ${fraunces.variable} antialiased`}>
         <Shell>{children}</Shell>
       </body>
     </html>

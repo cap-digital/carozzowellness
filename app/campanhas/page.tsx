@@ -21,7 +21,7 @@ import { DataTable, Column } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { makeTooltip } from "@/components/charts/ChartTooltip";
 import { sum } from "@/lib/metrics";
-import { objectiveBreakdown, totalConversions } from "@/lib/aggregate";
+import { objectiveBreakdown } from "@/lib/aggregate";
 import { brl, int, resultNum } from "@/lib/format";
 import { CHART } from "@/lib/theme";
 import { cn } from "@/lib/cn";
@@ -47,7 +47,6 @@ function Campanhas() {
   const { rows, platforms } = useData();
   const t = useMemo(() => sum(rows), [rows]);
   const objectives = useMemo(() => objectiveBreakdown(rows), [rows]);
-  const totalConv = useMemo(() => totalConversions(rows), [rows]);
   const [selCampaign, setSelCampaign] = useState<string>("all");
   const [platform, setPlatform] = useState<string>("meta");
 
@@ -82,14 +81,15 @@ function Campanhas() {
         { label: "Thruplays", value: st.thruplays, color: "#cf3a5f" },
       ];
     const sel = objectives.find((o) => o.key === objKey);
-    const resultLabel = objKey === "all" ? "Conversões" : sel?.primary?.label ?? "Conversões";
-    const resultValue = objKey === "all" ? totalConv : sel?.primaryValue ?? 0;
-    return [
+    const base = [
       impressions,
       { label: "Cliques", value: st.clicks, color: "#5a8f22" },
       { label: "Cliques no link", value: st.linkClicks, color: "#e0a010" },
-      { label: resultLabel, value: resultValue, color: "#cf3a5f" },
     ];
+    // "Todas as campanhas" mistura ações de resultado diferentes — não inventamos
+    // uma soma "Conversões". Uma campanha específica mostra sua própria métrica mãe.
+    if (objKey === "all" || !sel?.primary) return base;
+    return [...base, { label: sel.primary.label, value: sel.primaryValue, color: "#cf3a5f" }];
   };
 
   const sel = objectives.find((o) => o.key === selCampaign);
@@ -154,9 +154,9 @@ function Campanhas() {
       <Reveal>
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <SummaryCard label="Investimento total" value={brl(t.spend, 0)} hint="nas campanhas ativas" color="#465907" />
-          <SummaryCard label="Conversas iniciadas" value={int(primaryOf("WHATSAPP"))} hint="campanha WhatsApp" color="#5a8f22" />
-          <SummaryCard label="Cliques no WhatsApp" value={int(primaryOf("CONVERSAO-LP"))} hint="campanha Conversão-LP" color="#e0a010" />
-          <SummaryCard label="Leads" value={int(primaryOf("LEAD-ADS"))} hint="campanha Lead-Ads" color="#cf3a5f" />
+          <SummaryCard label="WhatsApp" value={int(primaryOf("WHATSAPP"))} hint="campanha WhatsApp" color="#5a8f22" />
+          <SummaryCard label="Leads LP" value={int(primaryOf("CONVERSAO-LP"))} hint="campanha Conversão-LP" color="#e0a010" />
+          <SummaryCard label="Leads Formulário" value={int(primaryOf("LEAD-ADS"))} hint="campanha Lead-Ads" color="#cf3a5f" />
         </div>
       </Reveal>
 
@@ -202,7 +202,7 @@ function Campanhas() {
               </ResponsiveContainer>
             </div>
             <div className="mt-1 px-1 text-[11px] text-[var(--text-muted)]">
-              Cada barra usa a métrica principal da campanha (conversas, cliques no WhatsApp ou leads).
+              Cada barra usa a métrica principal da campanha (WhatsApp, Leads LP ou Leads Formulário).
             </div>
           </ChartCard>
         </div>

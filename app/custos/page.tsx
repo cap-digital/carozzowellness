@@ -20,7 +20,7 @@ import { ChartCard, SectionTitle, Card } from "@/components/ui/Card";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { DataTable, Column } from "@/components/ui/DataTable";
 import { makeTooltip, TipShell } from "@/components/charts/ChartTooltip";
-import { sum, derive, byDate } from "@/lib/metrics";
+import { sum, derive, byDate, convCost } from "@/lib/metrics";
 import { objectiveBreakdown } from "@/lib/aggregate";
 import { brl, pct, dec, compactBRL, shortDate } from "@/lib/format";
 import { CHART } from "@/lib/theme";
@@ -107,12 +107,13 @@ function Custos() {
     { l: "CPV", v: brl(d.cpv, 3), hint: "custo por view de vídeo", color: "#cf3a5f" },
     { l: "VTR", v: pct(d.vtr), hint: "thruplays ÷ impressões", color: "#14a58c" },
   ];
-  // secondary metrics shown as a slim inline strip
+  // secondary metrics shown as a slim inline strip — cost per conversion action,
+  // one per strategy, kept separate (never a blended "custo por conversão")
   const secondary = [
     { l: "Frequência", v: `${dec(d.frequency, 2)}x`, color: "#8a63d4" },
-    { l: "CPL", v: brl(d.cpl), color: "#e56a2b" },
-    { l: "Custo / conversa", v: brl(d.cpConversation), color: "#b08a3e" },
-    { l: "Custo / WhatsApp", v: brl(d.cpWhatsapp), color: "#17a34a" },
+    { l: "Custo / WhatsApp", v: brl(d.cpConversation), color: "#5a8f22" },
+    { l: "Custo / Lead LP", v: brl(d.cpWhatsapp), color: "#e0a010" },
+    { l: "Custo / Lead Formulário", v: brl(convCost(t, "leadGrouped")), color: "#cf3a5f" },
   ];
 
   // Table by objective

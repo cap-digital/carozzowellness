@@ -80,9 +80,9 @@ export function normalize(r: MetaRow): Row {
 // The client measures each campaign by its objective's own KPI, never a blanket sum.
 export interface PrimaryDef {
   field: "impressions" | "reach" | "videoViews" | "conversations" | "whatsapp" | "leadGrouped";
-  label: string; // full name, e.g. "Conversas iniciadas"
+  label: string; // full name, e.g. "WhatsApp"
   short: string; // compact name for tight spaces
-  costLabel: string; // e.g. "Custo por conversa"
+  costLabel: string; // e.g. "Custo por WhatsApp"
   isConversion: boolean; // bottom-funnel result (vs impressions/views)
 }
 
@@ -90,13 +90,46 @@ export interface PrimaryDef {
 export const PRIMARY_BY_OBJECTIVE: Record<string, PrimaryDef> = {
   ALCANCE: { field: "impressions", label: "Impressões", short: "Impressões", costLabel: "Custo por mil (CPM)", isConversion: false },
   VIDEOVIEW: { field: "videoViews", label: "Views de vídeo", short: "Views", costLabel: "Custo por view (CPV)", isConversion: false },
-  WHATSAPP: { field: "conversations", label: "Conversas iniciadas", short: "Conversas", costLabel: "Custo por conversa", isConversion: true },
-  "CONVERSAO-LP": { field: "whatsapp", label: "Cliques no WhatsApp", short: "Cliques WhatsApp", costLabel: "Custo por clique WhatsApp", isConversion: true },
-  "LEAD-ADS": { field: "leadGrouped", label: "Leads", short: "Leads", costLabel: "Custo por lead", isConversion: true },
+  WHATSAPP: { field: "conversations", label: "WhatsApp", short: "WhatsApp", costLabel: "Custo por WhatsApp", isConversion: true },
+  "CONVERSAO-LP": { field: "whatsapp", label: "Leads LP", short: "Leads LP", costLabel: "Custo por Lead LP", isConversion: true },
+  "LEAD-ADS": { field: "leadGrouped", label: "Leads Formulário", short: "Leads Form.", costLabel: "Custo por Lead Formulário", isConversion: true },
 };
 
 export function primaryDef(objective: string): PrimaryDef | undefined {
   return PRIMARY_BY_OBJECTIVE[objective];
+}
+
+// ---- individual conversion actions -----------------------------------------
+// The client wants these THREE tracked separately — each with its own count,
+// cost and rate — NEVER collapsed into a single "Conversões" total.
+// Each field is the "métrica mãe" of one campaign strategy, and is NAMED after
+// that strategy (data column → display name):
+//   conversations (…conversation_started_7d)        · estratégia WHATSAPP     → "WhatsApp"
+//   whatsapp      (…custom_clique_botao_whatsapp)    · estratégia CONVERSAO-LP → "Leads LP"
+//   leadGrouped   (…onsite_conversion_lead_grouped)  · estratégia LEAD-ADS     → "Leads Formulário"
+export type ConversionKey = "conversations" | "whatsapp" | "leadGrouped";
+export interface ConversionMetric {
+  key: ConversionKey;
+  label: string; // full name
+  short: string; // compact name for tight spaces
+  color: string;
+  costLabel: string; // e.g. "Custo por WhatsApp"
+}
+
+export const CONVERSION_METRICS: ConversionMetric[] = [
+  { key: "conversations", label: "WhatsApp", short: "WhatsApp", color: "#5a8f22", costLabel: "Custo por WhatsApp" },
+  { key: "whatsapp", label: "Leads LP", short: "Leads LP", color: "#e0a010", costLabel: "Custo por Lead LP" },
+  { key: "leadGrouped", label: "Leads Formulário", short: "Leads Form.", color: "#cf3a5f", costLabel: "Custo por Lead Formulário" },
+];
+
+// Cost (R$) of one unit of a conversion action — spend ÷ count.
+export function convCost(t: Totals, key: ConversionKey): number {
+  return div(t.spend, t[key]);
+}
+
+// Rate (%) of a conversion action relative to link clicks.
+export function convRate(t: Totals, key: ConversionKey): number {
+  return div(t[key], t.linkClicks) * 100;
 }
 
 // Primary result value for an aggregated Totals given the campaign objective.

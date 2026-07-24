@@ -19,11 +19,13 @@ import { Donut } from "@/components/charts/Donut";
 import { Heatmap } from "@/components/charts/Heatmap";
 import { Pyramid } from "@/components/charts/Pyramid";
 import { makeTooltip } from "@/components/charts/ChartTooltip";
-import { sum, derive, groupSum } from "@/lib/metrics";
+import { sum, derive, groupSum, CONVERSION_METRICS } from "@/lib/metrics";
 import { ageGenderMatrix, ageBreakdown, genderBreakdown, orderedAges } from "@/lib/aggregate";
 import { brl, int, pct, compact } from "@/lib/format";
 import { CHART, GENDER_COLOR } from "@/lib/theme";
 import type { Row } from "@/lib/types";
+
+const convByKey = Object.fromEntries(CONVERSION_METRICS.map((m) => [m.key, m]));
 
 export default function PublicoPage() {
   return (
@@ -33,13 +35,15 @@ export default function PublicoPage() {
   );
 }
 
-type MetricKey = "impressions" | "spend" | "clicks" | "conv";
+type MetricKey = "impressions" | "spend" | "clicks" | "conversations" | "whatsapp" | "leadGrouped";
 
 const METRIC_ACCESSOR: Record<MetricKey, { fn: (r: Row) => number; label: string; fmt: (v: number) => string }> = {
   impressions: { fn: (r) => r.impressions, label: "Impressões", fmt: (v) => int(v) },
   spend: { fn: (r) => r.spend, label: "Investimento", fmt: (v) => brl(v, 0) },
   clicks: { fn: (r) => r.linkClicks, label: "Cliques no link", fmt: (v) => int(v) },
-  conv: { fn: (r) => r.whatsapp + r.leads + r.conversations, label: "Conversões", fmt: (v) => int(v) },
+  conversations: { fn: (r) => r.conversations, label: "WhatsApp", fmt: (v) => int(v) },
+  whatsapp: { fn: (r) => r.whatsapp, label: "Leads LP", fmt: (v) => int(v) },
+  leadGrouped: { fn: (r) => r.leadGrouped, label: "Leads Formulário", fmt: (v) => int(v) },
 };
 
 function Publico() {
@@ -165,7 +169,9 @@ function Publico() {
                 { value: "impressions", label: "Impressões" },
                 { value: "spend", label: "Investido" },
                 { value: "clicks", label: "Cliques" },
-                { value: "conv", label: "Conversões" },
+                { value: "conversations", label: "WhatsApp" },
+                { value: "whatsapp", label: "Leads LP" },
+                { value: "leadGrouped", label: "Leads Form." },
               ]}
             />
           }
@@ -201,19 +207,32 @@ function Publico() {
             </div>
           </ChartCard>
 
-          <ChartCard title="Conversões por faixa etária" subtitle="WhatsApp + leads + conversas" accent="#cf3a5f">
+          <ChartCard title="Conversões por faixa etária" subtitle="WhatsApp, Leads LP e Leads Formulário — cada ação separada" accent="#cf3a5f">
             <div style={{ height: 220 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart layout="vertical" data={ageStats.map((a) => ({ name: a.age, v: a.t.whatsapp + a.t.leads + a.t.conversations }))} margin={{ top: 4, right: 40, left: 4, bottom: 0 }}>
+                <BarChart
+                  layout="vertical"
+                  data={ageStats.map((a) => ({ name: a.age, conversations: a.t.conversations, whatsapp: a.t.whatsapp, leadGrouped: a.t.leadGrouped }))}
+                  margin={{ top: 4, right: 24, left: 4, bottom: 0 }}
+                  barCategoryGap="22%"
+                >
                   <CartesianGrid horizontal={false} stroke={CHART.grid} />
-                  <XAxis type="number" tick={{ fontSize: 11, fill: CHART.textMuted }} tickLine={false} axisLine={{ stroke: CHART.axis }} />
+                  <XAxis type="number" tick={{ fontSize: 11, fill: CHART.textMuted }} tickLine={false} axisLine={{ stroke: CHART.axis }} allowDecimals={false} />
                   <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: CHART.textSecondary }} tickLine={false} axisLine={false} width={44} />
-                  <Tooltip cursor={{ fill: "rgba(70,89,7,0.06)" }} content={makeTooltip((_n, v) => ({ label: "Conversões", value: int(v), color: "#cf3a5f" }))} />
-                  <Bar isAnimationActive={false} dataKey="v" fill="#cf3a5f" radius={[0, 4, 4, 0]} maxBarSize={22}>
-                    <LabelList dataKey="v" position="right" formatter={(v: any) => int(v)} style={{ fontSize: 11, fill: CHART.textSecondary, fontWeight: 600 }} />
-                  </Bar>
+                  <Tooltip cursor={{ fill: "rgba(70,89,7,0.06)" }} content={makeTooltip((n, v) => { const m = convByKey[n]; return m ? { label: m.label, value: int(v), color: m.color } : null; })} />
+                  {CONVERSION_METRICS.map((m) => (
+                    <Bar key={m.key} isAnimationActive={false} dataKey={m.key} fill={m.color} radius={[0, 3, 3, 0]} maxBarSize={9} />
+                  ))}
                 </BarChart>
               </ResponsiveContainer>
+            </div>
+            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 px-1 text-[11.5px] text-[var(--text-secondary)]">
+              {CONVERSION_METRICS.map((m) => (
+                <span key={m.key} className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: m.color }} />
+                  {m.label}
+                </span>
+              ))}
             </div>
           </ChartCard>
         </div>

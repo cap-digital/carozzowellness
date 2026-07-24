@@ -4,6 +4,8 @@ import { useMemo } from "react";
 import {
   BarChart,
   Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -19,10 +21,11 @@ import { DataTable, Column } from "@/components/ui/DataTable";
 import { Sparkline } from "@/components/ui/Sparkline";
 import { Badge } from "@/components/ui/Badge";
 import { Donut } from "@/components/charts/Donut";
+import { ConversionStats } from "@/components/ui/ConversionStats";
 import { CreativeThumb } from "@/components/ui/CreativeThumb";
 import { makeTooltip } from "@/components/charts/ChartTooltip";
-import { sum, derive, groupSum, byDate } from "@/lib/metrics";
-import { objectiveBreakdown, placementBreakdown, adBreakdown, totalConversions } from "@/lib/aggregate";
+import { sum, derive, groupSum, byDate, CONVERSION_METRICS } from "@/lib/metrics";
+import { objectiveBreakdown, placementBreakdown, adBreakdown } from "@/lib/aggregate";
 import { brl, int, pct, compact, compactBRL, resultNum, shortDate } from "@/lib/format";
 import { CHART, OBJECTIVE_COLOR, FORMAT_COLOR } from "@/lib/theme";
 import { Aperture, ExternalLink } from "lucide-react";
@@ -58,10 +61,29 @@ function Meta() {
   // Top 3 creatives by investment
   const top3 = useMemo(() => adBreakdown(rows).slice(0, 3), [rows]);
 
-  const conversions = useMemo(() => totalConversions(rows), [rows]);
+  // Daily series for each conversion action — kept SEPARATE (never summed).
+  const convDaily = useMemo(
+    () =>
+      byDate(rows).map((g) => ({
+        date: g.key,
+        conversations: g.totals.conversations,
+        whatsapp: g.totals.whatsapp,
+        leadGrouped: g.totals.leadGrouped,
+      })),
+    [rows]
+  );
 
   const stackTip = makeTooltip(
     (name, value) => (value > 0 ? { label: name, value: brl(value), color: OBJECTIVE_COLOR[name] ?? "#888" } : null),
+    (label) => shortDate(String(label))
+  );
+
+  const convLabel = Object.fromEntries(CONVERSION_METRICS.map((m) => [m.key, m]));
+  const convTip = makeTooltip(
+    (name, value) => {
+      const m = convLabel[name];
+      return m ? { label: m.label, value: int(value), color: m.color } : null;
+    },
     (label) => shortDate(String(label))
   );
 
@@ -132,13 +154,12 @@ function Meta() {
                 </p>
               </div>
             </div>
-            <div className="grid flex-1 grid-cols-2 gap-x-4 gap-y-3 border-t border-[var(--border)] pt-4 sm:grid-cols-3 md:border-l md:border-t-0 md:pl-6 md:pt-0 lg:grid-cols-5">
+            <div className="grid flex-1 grid-cols-2 gap-x-4 gap-y-3 border-t border-[var(--border)] pt-4 sm:grid-cols-4 md:border-l md:border-t-0 md:pl-6 md:pt-0">
               {[
                 { l: "Investido", v: brl(t.spend, 0) },
                 { l: "Impressões", v: compact(t.impressions) },
                 { l: "CTR link", v: pct(d.ctrLink) },
                 { l: "Cliques no link", v: int(t.linkClicks) },
-                { l: "Conversões", v: int(conversions) },
               ].map((s) => (
                 <div key={s.l}>
                   <div className="text-[11px] uppercase tracking-wide text-[var(--text-muted)]">{s.l}</div>
@@ -150,8 +171,69 @@ function Meta() {
         </Card>
       </Reveal>
 
+      {/* Conversões separadas — cada ação com sua taxa e custo */}
+      <Reveal delay={40}>
+        <SectionTitle hint="cada ação de conversão com sua contagem, custo e taxa — nunca somadas">
+          Conversões por tipo
+        </SectionTitle>
+        <ConversionStats totals={t} />
+      </Reveal>
+
+      {/* Line chart: daily evolution of each conversion action */}
+      <Reveal delay={80}>
+        <ChartCard
+          title="Evolução das conversões por tipo"
+          subtitle="WhatsApp, Leads LP e Leads Formulário — cada linha é uma ação, dia a dia"
+          accent="#5a8f22"
+        >
+          <div style={{ height: 288 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={convDaily} margin={{ top: 10, right: 12, left: 4, bottom: 0 }}>
+                <CartesianGrid vertical={false} stroke={CHART.grid} />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={shortDate}
+                  tick={{ fontSize: 11, fill: CHART.textMuted }}
+                  tickLine={false}
+                  axisLine={{ stroke: CHART.axis }}
+                />
+                <YAxis
+                  tickFormatter={(v) => compact(v)}
+                  tick={{ fontSize: 11, fill: CHART.textMuted }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={40}
+                  allowDecimals={false}
+                />
+                <Tooltip content={convTip} cursor={{ stroke: CHART.axis, strokeDasharray: "3 3" }} />
+                {CONVERSION_METRICS.map((m) => (
+                  <Line
+                    key={m.key}
+                    isAnimationActive={false}
+                    type="monotone"
+                    dataKey={m.key}
+                    stroke={m.color}
+                    strokeWidth={2.5}
+                    dot={false}
+                    activeDot={{ r: 4, fill: m.color, stroke: "var(--surface-1)", strokeWidth: 2 }}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 px-1 text-[11.5px] text-[var(--text-secondary)]">
+            {CONVERSION_METRICS.map((m) => (
+              <span key={m.key} className="flex items-center gap-1.5">
+                <span className="h-[3px] w-3.5 rounded-full" style={{ background: m.color }} />
+                {m.label}
+              </span>
+            ))}
+          </div>
+        </ChartCard>
+      </Reveal>
+
       {/* Stacked spend by objective */}
-      <Reveal delay={60}>
+      <Reveal delay={120}>
         <SectionTitle hint="composição diária do investimento">Investimento por objetivo</SectionTitle>
         <ChartCard
           title="Distribuição diária do gasto entre objetivos"

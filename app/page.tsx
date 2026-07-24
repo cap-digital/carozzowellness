@@ -23,11 +23,11 @@ import { Donut } from "@/components/charts/Donut";
 import { Funnel } from "@/components/charts/Funnel";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { makeTooltip, TipShell } from "@/components/charts/ChartTooltip";
-import { sum, derive } from "@/lib/metrics";
-import { dailySeries, objectiveBreakdown, totalConversions } from "@/lib/aggregate";
+import { sum, derive, CONVERSION_METRICS } from "@/lib/metrics";
+import { dailySeries, objectiveBreakdown } from "@/lib/aggregate";
 import { brl, int, compact, compactBRL, pct, shortDate } from "@/lib/format";
 import { CHART } from "@/lib/theme";
-import { Eye, Users, MousePointerClick, Target } from "lucide-react";
+import { Eye, Users, MousePointerClick } from "lucide-react";
 
 // Selectable metrics for the daily comparison chart.
 type Kind = "money" | "int" | "pct";
@@ -45,9 +45,9 @@ const DELIVERY_METRICS: DeliveryMetric[] = [
   { key: "spend", label: "Investimento", color: "#465907", kind: "money" },
   { key: "engagement", label: "Engajamento", color: "#8a63d4", kind: "int" },
   { key: "videoViews", label: "Views de vídeo", color: "#cf3a5f", kind: "int" },
-  { key: "whatsapp", label: "Cliques WhatsApp", color: "#17a34a", kind: "int" },
-  { key: "conversations", label: "Conversas", color: "#e56a2b", kind: "int" },
-  { key: "leads", label: "Leads", color: "#d269a8", kind: "int" },
+  { key: "conversations", label: "WhatsApp", color: "#5a8f22", kind: "int" },
+  { key: "whatsapp", label: "Leads LP", color: "#e0a010", kind: "int" },
+  { key: "leadGrouped", label: "Leads Formulário", color: "#cf3a5f", kind: "int" },
   { key: "cpm", label: "CPM", color: "#8f6d29", kind: "money" },
   { key: "ctr", label: "CTR", color: "#b08a3e", kind: "pct" },
   { key: "cpc", label: "CPC", color: "#324420", kind: "money" },
@@ -81,16 +81,14 @@ function Overview() {
     });
   }, [daily]);
 
-  // Conversões = cada campanha contada pela sua métrica mãe (não uma soma genérica)
-  const conversions = useMemo(() => totalConversions(rows), [rows]);
-  const primaryOf = (key: string) => objectives.find((o) => o.key === key)?.primaryValue ?? 0;
   const spark = (k: keyof (typeof daily)[number]) => daily.map((p) => Number(p[k]));
 
+  // Delivery funnel — ends at the link click. The three conversion actions are
+  // tracked separately below (never summed into a single "Conversões" total).
   const funnelStages = [
     { label: "Impressões", value: t.impressions, color: "#2f80c4" },
     { label: "Cliques", value: t.clicks, color: "#5a8f22" },
     { label: "Cliques no link", value: t.linkClicks, color: "#e0a010" },
-    { label: "Conversões", value: conversions, color: "#cf3a5f" },
   ];
 
   const spendLineTip = makeTooltip(
@@ -162,14 +160,23 @@ function Overview() {
               icon={<MousePointerClick size={14} />}
               spark={spark("linkClicks")}
             />
-            <Kpi
-              label="Conversões"
-              value={int(conversions)}
-              sub={`${int(primaryOf("WHATSAPP"))} conversas · ${int(primaryOf("LEAD-ADS"))} leads`}
-              color="#cf3a5f"
-              icon={<Target size={14} />}
-              spark={spark("clicks")}
-            />
+            <div className="relative flex min-w-0 flex-col justify-center overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] p-4 shadow-card">
+              <span className="absolute left-0 top-4 h-7 w-[3px] rounded-full bg-[#cf3a5f]" />
+              <div className="flex items-center gap-1.5 pl-2 text-[12px] font-medium text-[var(--text-secondary)]">
+                <span className="truncate">Conversões por tipo</span>
+              </div>
+              <div className="mt-2 space-y-1.5 pl-2">
+                {CONVERSION_METRICS.map((m) => (
+                  <div key={m.key} className="flex items-center gap-2">
+                    <span className="h-2 w-2 shrink-0 rounded-[2px]" style={{ background: m.color }} />
+                    <span className="truncate text-[11.5px] text-[var(--text-muted)]">{m.short}</span>
+                    <span className="ml-auto text-[14px] font-semibold tnum text-[var(--text-primary)]">
+                      {int(t[m.key])}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </Reveal>
@@ -235,6 +242,7 @@ function Overview() {
               centerValue={compactBRL(t.spend)}
               centerLabel="investimento"
               format={(v) => brl(v, 0)}
+              legendBelow
             />
           </ChartCard>
         </div>
@@ -244,8 +252,8 @@ function Overview() {
       <Reveal delay={120}>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <ChartCard
-            title="Jornada de conversão"
-            subtitle="Da impressão à conversão, com taxa entre etapas"
+            title="Jornada de mídia"
+            subtitle="Da impressão ao clique no link, com taxa entre etapas"
             accent="#14a58c"
           >
             <div className="pt-1">

@@ -252,7 +252,7 @@ function Criativos() {
               { value: "spend", label: "Investimento" },
               { value: "ctr", label: "CTR" },
               { value: "impressions", label: "Impressões" },
-              { value: "conv", label: "Conversões" },
+              { value: "conv", label: "Resultado" },
             ]}
           />
         </div>

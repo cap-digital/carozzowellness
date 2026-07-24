@@ -1,7 +1,7 @@
 import { Row } from "./types";
 import {
   sum, derive, groupSum, byDate,
-  primaryDef, primaryResult, costPerPrimary, PRIMARY_BY_OBJECTIVE,
+  primaryDef, primaryResult, costPerPrimary,
 } from "./metrics";
 import { OBJECTIVE_COLOR, FORMAT_COLOR, SERIES } from "./theme";
 
@@ -21,14 +21,6 @@ export function objectiveBreakdown(rows: Row[]) {
       costPerResult: costPerPrimary(g.key, g.totals),
     }))
     .sort((a, b) => b.totals.spend - a.totals.spend);
-}
-
-// Bottom-funnel conversions = each conversion campaign counted by ITS métrica mãe.
-export function totalConversions(rows: Row[]): number {
-  return groupSum(rows, (r) => r.objective).reduce((s, g) => {
-    const def = PRIMARY_BY_OBJECTIVE[g.key];
-    return def && def.isConversion ? s + primaryResult(g.key, g.totals) : s;
-  }, 0);
 }
 
 export function formatBreakdown(rows: Row[]) {
@@ -90,6 +82,7 @@ export interface DailyPoint {
   leads: number;
   whatsapp: number;
   conversations: number;
+  leadGrouped: number;
   videoViews: number;
   cpm: number;
   ctr: number;
@@ -112,6 +105,7 @@ export function dailySeries(rows: Row[]): DailyPoint[] {
       leads: t.leads,
       whatsapp: t.whatsapp,
       conversations: t.conversations,
+      leadGrouped: t.leadGrouped,
       videoViews: t.videoViews,
       cpm: +d.cpm.toFixed(2),
       ctr: +d.ctr.toFixed(3),

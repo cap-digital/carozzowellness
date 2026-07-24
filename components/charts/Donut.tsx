@@ -17,6 +17,7 @@ export function Donut({
   format,
   height = 210,
   thickness = 26,
+  legendBelow = false,
 }: {
   data: DonutDatum[];
   centerValue?: string;
@@ -24,12 +25,15 @@ export function Donut({
   format: (v: number) => string;
   height?: number;
   thickness?: number;
+  // Stack the legend UNDER the (centered) chart instead of beside it — use in
+  // narrow cards where the side legend clips values/percentages.
+  legendBelow?: boolean;
 }) {
   const total = data.reduce((s, d) => s + d.value, 0) || 1;
   const [active, setActive] = React.useState<number | null>(null);
 
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+    <div className={legendBelow ? "flex flex-col gap-4" : "flex flex-col gap-3 sm:flex-row sm:items-center"}>
       <div className="relative mx-auto shrink-0" style={{ width: height, height }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -70,7 +74,7 @@ export function Donut({
         </div>
       </div>
 
-      <ul className="flex-1 space-y-1.5">
+      <ul className={legendBelow ? "w-full space-y-1" : "flex-1 space-y-1.5"}>
         {data.map((d, i) => (
           <li
             key={d.name}
