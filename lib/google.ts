@@ -91,6 +91,32 @@ export function gDaily(rows: GoogleRow[]) {
     }));
 }
 
+export interface CampaignStat {
+  campaign: string;
+  spend: number;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+}
+
+// Aggregate per campaign, sorted by spend desc.
+export function gByCampaign(rows: GoogleRow[]): CampaignStat[] {
+  const map = new Map<string, GTotals>();
+  for (const r of rows) {
+    const t = map.get(r.campaign) ?? { spend: 0, clicks: 0, impressions: 0, rows: 0 };
+    t.spend += r.spend; t.clicks += r.clicks; t.impressions += r.impressions; t.rows += 1;
+    map.set(r.campaign, t);
+  }
+  return [...map.entries()]
+    .map(([campaign, t]) => {
+      const d = gDerive(t);
+      return { campaign, spend: t.spend, clicks: t.clicks, impressions: t.impressions, ctr: d.ctr, cpc: d.cpc, cpm: d.cpm };
+    })
+    .sort((a, b) => b.spend - a.spend);
+}
+
 export interface TermStat {
   term: string;
   spend: number;

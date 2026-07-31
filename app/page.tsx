@@ -17,7 +17,7 @@ import {
 } from "recharts";
 import { useData } from "@/components/providers/DataProvider";
 import { Loadable, Reveal } from "@/components/ui/Loadable";
-import { ChartCard, SectionTitle } from "@/components/ui/Card";
+import { Card, ChartCard, SectionTitle } from "@/components/ui/Card";
 import { Kpi } from "@/components/ui/Kpi";
 import { Donut } from "@/components/charts/Donut";
 import { Funnel } from "@/components/charts/Funnel";
@@ -25,6 +25,7 @@ import { Dropdown } from "@/components/ui/Dropdown";
 import { makeTooltip, TipShell } from "@/components/charts/ChartTooltip";
 import { sum, derive } from "@/lib/metrics";
 import { dailySeries, objectiveBreakdown, conversionStats } from "@/lib/aggregate";
+import { gSum, gDerive } from "@/lib/google";
 import { brl, int, compact, compactBRL, pct, shortDate } from "@/lib/format";
 import { CHART } from "@/lib/theme";
 import { Eye, Users, MousePointerClick } from "lucide-react";
@@ -66,13 +67,22 @@ export default function OverviewPage() {
 }
 
 function Overview() {
-  const { rows } = useData();
+  const { rows, googleRows } = useData();
 
   const t = useMemo(() => sum(rows), [rows]);
   const d = useMemo(() => derive(t), [t]);
   const daily = useMemo(() => dailySeries(rows), [rows]);
   const objectives = useMemo(() => objectiveBreakdown(rows), [rows]);
   const convStats = useMemo(() => conversionStats(rows), [rows]);
+
+  // Cross-platform: Meta + Google Search
+  const gT = useMemo(() => gSum(googleRows), [googleRows]);
+  const gD = useMemo(() => gDerive(gT), [gT]);
+  const totalSpend = t.spend + gT.spend;
+  const platforms = [
+    { name: "Meta Ads", color: "#2f80c4", spend: t.spend, impressions: t.impressions, clicks: t.linkClicks, ctr: d.ctrLink },
+    { name: "Google Pesquisa", color: "#e0a010", spend: gT.spend, impressions: gT.impressions, clicks: gT.clicks, ctr: gD.ctr },
+  ];
 
   const cumulative = useMemo(() => {
     let acc = 0;
@@ -127,10 +137,10 @@ function Overview() {
                 Investimento total em mídia
               </p>
               <p className="mt-3 font-display text-[46px] font-semibold leading-none">
-                {brl(t.spend)}
+                {brl(totalSpend)}
               </p>
               <p className="mt-3 text-[12.5px] text-white/55">
-                Média de {brl(t.spend / Math.max(daily.length, 1), 0)} por dia
+                Meta {compactBRL(t.spend)} · Google {compactBRL(gT.spend)}
                 {daily.length > 0 && ` · ${daily.length} dias`}
               </p>
             </div>
@@ -182,9 +192,38 @@ function Overview() {
         </div>
       </Reveal>
 
+      {/* Per-platform summary */}
+      <Reveal delay={40}>
+        <SectionTitle hint="investimento e entrega por canal">Por plataforma</SectionTitle>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {platforms.map((p) => (
+            <Card key={p.name} className="relative overflow-hidden p-4">
+              <span className="absolute left-0 top-4 h-9 w-[3px] rounded-full" style={{ background: p.color }} />
+              <div className="flex items-center gap-2 pl-2">
+                <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: p.color }} />
+                <span className="text-[13px] font-semibold text-[var(--text-primary)]">{p.name}</span>
+                <span className="ml-auto text-[15px] font-semibold tnum text-[var(--text-primary)]">{brl(p.spend, 0)}</span>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2 pl-2">
+                {[
+                  { l: "Impressões", v: compact(p.impressions) },
+                  { l: "Cliques", v: int(p.clicks) },
+                  { l: "CTR", v: pct(p.ctr) },
+                ].map((s) => (
+                  <div key={s.l}>
+                    <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">{s.l}</div>
+                    <div className="mt-0.5 text-[14px] font-semibold tnum text-[var(--text-primary)]">{s.v}</div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          ))}
+        </div>
+      </Reveal>
+
       {/* Combined bar+line & donut */}
       <Reveal delay={60}>
-        <SectionTitle hint="ritmo de veiculação e mix de objetivos">Desempenho ao longo do período</SectionTitle>
+        <SectionTitle hint="Meta Ads · ritmo de veiculação e mix de objetivos">Desempenho ao longo do período</SectionTitle>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <ChartCard
             className="lg:col-span-2"

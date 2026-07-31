@@ -22,7 +22,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { makeTooltip } from "@/components/charts/ChartTooltip";
 import { sum } from "@/lib/metrics";
 import { objectiveBreakdown } from "@/lib/aggregate";
-import { brl, int, resultNum } from "@/lib/format";
+import { gByCampaign, type CampaignStat } from "@/lib/google";
+import { brl, int, pct, resultNum } from "@/lib/format";
 import { CHART } from "@/lib/theme";
 import { cn } from "@/lib/cn";
 import type { Totals } from "@/lib/types";
@@ -44,9 +45,10 @@ export default function CampanhasPage() {
 }
 
 function Campanhas() {
-  const { rows, platforms } = useData();
+  const { rows, googleRows, platforms } = useData();
   const t = useMemo(() => sum(rows), [rows]);
   const objectives = useMemo(() => objectiveBreakdown(rows), [rows]);
+  const googleCampaigns = useMemo(() => gByCampaign(googleRows), [googleRows]);
   const [selCampaign, setSelCampaign] = useState<string>("all");
   const [platform, setPlatform] = useState<string>("meta");
 
@@ -148,6 +150,25 @@ function Campanhas() {
     },
   ];
 
+  const gcols: Column<CampaignStat>[] = [
+    {
+      key: "camp",
+      header: "Campanha",
+      render: (r) => (
+        <span className="flex items-center gap-2 font-medium text-[var(--text-primary)]">
+          <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: "#e0a010" }} />
+          {r.campaign}
+        </span>
+      ),
+      sortValue: (r) => r.campaign,
+    },
+    { key: "spend", header: "Investido", align: "right", render: (r) => brl(r.spend), sortValue: (r) => r.spend },
+    { key: "impr", header: "Impressões", align: "right", render: (r) => int(r.impressions), sortValue: (r) => r.impressions },
+    { key: "clicks", header: "Cliques", align: "right", render: (r) => int(r.clicks), sortValue: (r) => r.clicks },
+    { key: "ctr", header: "CTR", align: "right", render: (r) => pct(r.ctr), sortValue: (r) => r.ctr },
+    { key: "cpc", header: "CPC", align: "right", render: (r) => brl(r.cpc), sortValue: (r) => r.cpc },
+  ];
+
   return (
     <div className="space-y-6">
       {/* Summary — each conversion campaign by its métrica mãe */}
@@ -239,9 +260,11 @@ function Campanhas() {
           </div>
         </div>
 
-        <Card className={platform === "meta" ? "p-1.5" : ""}>
+        <Card className={platform === "meta" || platform === "google" ? "p-1.5" : ""}>
           {platform === "meta" ? (
             <DataTable columns={cols} data={objectives} rowKey={(r) => r.key} initialSort={{ key: "spend", dir: "desc" }} />
+          ) : platform === "google" ? (
+            <DataTable columns={gcols} data={googleCampaigns} rowKey={(r) => r.campaign} initialSort={{ key: "spend", dir: "desc" }} />
           ) : (
             <EmptyState
               icon={<Clock size={22} />}

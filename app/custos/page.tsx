@@ -22,7 +22,8 @@ import { DataTable, Column } from "@/components/ui/DataTable";
 import { makeTooltip, TipShell } from "@/components/charts/ChartTooltip";
 import { sum, derive, byDate } from "@/lib/metrics";
 import { objectiveBreakdown, conversionStats } from "@/lib/aggregate";
-import { brl, pct, dec, compactBRL, shortDate } from "@/lib/format";
+import { gSum, gDerive } from "@/lib/google";
+import { brl, int, pct, dec, compactBRL, shortDate } from "@/lib/format";
 import { CHART } from "@/lib/theme";
 
 export default function CustosPage() {
@@ -61,10 +62,20 @@ const OBJ_METRICS: { key: string; label: string; kind: Kind }[] = [
 ];
 
 function Custos() {
-  const { rows } = useData();
+  const { rows, googleRows } = useData();
   const t = useMemo(() => sum(rows), [rows]);
   const d = useMemo(() => derive(t), [t]);
   const objectives = useMemo(() => objectiveBreakdown(rows), [rows]);
+  // Google Search cost/rate metrics
+  const gT = useMemo(() => gSum(googleRows), [googleRows]);
+  const gD = useMemo(() => gDerive(gT), [gT]);
+  const googleTiles = [
+    { l: "Investido", v: brl(gT.spend, 0), hint: "total na Rede de Pesquisa" },
+    { l: "CPC", v: brl(gD.cpc), hint: "custo por clique" },
+    { l: "CTR", v: pct(gD.ctr), hint: "taxa de cliques" },
+    { l: "CPM", v: brl(gD.cpm), hint: "custo por mil impressões" },
+    { l: "Cliques", v: int(gT.clicks), hint: `de ${int(gT.impressions)} impressões` },
+  ];
   // Cost per conversion action, each from its OWN campaign strategy's spend.
   const cs = useMemo(() => {
     const m = new Map(conversionStats(rows).map((s) => [s.key, s]));
@@ -181,6 +192,23 @@ function Custos() {
           ))}
         </Card>
       </Reveal>
+
+      {/* Google Search costs */}
+      {gT.rows > 0 && (
+        <Reveal delay={40}>
+          <SectionTitle hint="rede de pesquisa · custo por clique e impressão">Custos — Google Rede de Pesquisa</SectionTitle>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {googleTiles.map((m) => (
+              <Card key={m.l} className="relative overflow-hidden p-4">
+                <span className="absolute left-0 top-4 h-7 w-[3px] rounded-full" style={{ background: "#e0a010" }} />
+                <div className="pl-2 text-[12px] font-medium text-[var(--text-secondary)]">{m.l}</div>
+                <div className="mt-1.5 pl-2 text-[23px] font-semibold leading-none tnum text-[var(--text-primary)]">{m.v}</div>
+                <div className="mt-1.5 pl-2 text-[11px] text-[var(--text-muted)]">{m.hint}</div>
+              </Card>
+            ))}
+          </div>
+        </Reveal>
+      )}
 
       {/* Trend + per-objective */}
       <Reveal delay={60}>
