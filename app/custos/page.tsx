@@ -91,14 +91,17 @@ function Custos() {
     () =>
       byDate(rows).map((g) => {
         const dd = derive(g.totals);
+        // CPV/VTR são específicos da campanha de vídeo — usar só o gasto/impressões
+        // dela no dia, nunca o investimento total dividido pelas views.
+        const vd = derive(sum(g.rows.filter((r) => r.objective === "VIDEOVIEW")));
         return {
           date: g.key,
           cpm: +dd.cpm.toFixed(2),
           cpcLink: +dd.cpcLink.toFixed(2),
           ctrLink: +dd.ctrLink.toFixed(3),
           ctr: +dd.ctr.toFixed(3),
-          cpv: +dd.cpv.toFixed(3),
-          vtr: +dd.vtr.toFixed(2),
+          cpv: +vd.cpv.toFixed(3),
+          vtr: +vd.vtr.toFixed(2),
           frequency: +dd.frequency.toFixed(2),
           engagementRate: +dd.engagementRate.toFixed(2),
         } as Record<string, number | string>;
@@ -106,22 +109,26 @@ function Custos() {
     [rows]
   );
 
-  const objBars = useMemo(
-    () =>
-      objectives
-        .map((o) => ({ name: o.key, value: +((o.derived as any)[om.key] as number).toFixed(2), color: o.color }))
-        .filter((r) => isFinite(r.value) && r.value > 0)
-        .sort((a, b) => (om.kind === "pct" ? b.value - a.value : a.value - b.value)),
-    [objectives, om]
-  );
+  const objBars = useMemo(() => {
+    const meta = objectives.map((o) => ({ name: o.key, value: +((o.derived as any)[om.key] as number).toFixed(2), color: o.color }));
+    // Google Search only has cpm/cpc/ctr (no video → no CPV).
+    const gVal = ({ cpm: gD.cpm, cpcLink: gD.cpc, ctrLink: gD.ctr, cpv: 0 } as Record<string, number>)[om.key] ?? 0;
+    const google = gT.rows > 0 && gVal > 0 ? [{ name: "Google Pesquisa", value: +gVal.toFixed(2), color: "#e56a2b" }] : [];
+    return [...meta, ...google]
+      .filter((r) => isFinite(r.value) && r.value > 0)
+      .sort((a, b) => (om.kind === "pct" ? b.value - a.value : a.value - b.value));
+  }, [objectives, om, gT, gD]);
 
+  // CPV/VTR pertencem à campanha de vídeo — calcular com o gasto e as impressões
+  // DELA, não com o investimento total ÷ views (que inflaria o custo).
+  const video = objectives.find((o) => o.key === "VIDEOVIEW");
   // 5 headline metrics (the ones the client cares about)
   const tiles = [
     { l: "CPM", v: brl(d.cpm), hint: "custo por mil impressões", color: "#465907" },
     { l: "CPC (link)", v: brl(d.cpcLink), hint: "custo por clique no link", color: "#e0a010" },
     { l: "CTR (link)", v: pct(d.ctrLink), hint: "taxa de cliques no link", color: "#2f80c4" },
-    { l: "CPV", v: brl(d.cpv, 3), hint: "custo por view de vídeo", color: "#cf3a5f" },
-    { l: "VTR", v: pct(d.vtr), hint: "thruplays ÷ impressões", color: "#14a58c" },
+    { l: "CPV", v: video ? brl(video.derived.cpv, 3) : "—", hint: "custo por view · campanha de vídeo", color: "#cf3a5f" },
+    { l: "VTR", v: video ? pct(video.derived.vtr) : "—", hint: "thruplays ÷ impressões · vídeo", color: "#14a58c" },
   ];
   // secondary metrics shown as a slim inline strip — cost per conversion action,
   // one per strategy, kept separate (never a blended "custo por conversão")
@@ -132,9 +139,31 @@ function Custos() {
     { l: "Custo / Lead Formulário", v: brl(cs.leadGrouped.cost), color: "#cf3a5f" },
   ];
 
-  // Table by objective
-  type ORow = (typeof objectives)[number];
-  const cols: Column<ORow>[] = [
+  // Unified cost-row table across platforms. Google Search has no video/lead/
+  // reach metrics, so CPV/VTR/Freq/CPL come through as null → "—".
+  interface CostRow {
+    key: string; color: string; spend: number;
+    cpm: number; cpcLink: number; ctrLink: number;
+    cpv: number | null; vtr: number | null; frequency: number | null; cpl: number | null;
+  }
+  const costRows: CostRow[] = [
+    ...objectives.map((o) => ({
+      key: o.key, color: o.color, spend: o.totals.spend,
+      cpm: o.derived.cpm, cpcLink: o.derived.cpcLink, ctrLink: o.derived.ctrLink,
+      cpv: o.totals.videoViews ? o.derived.cpv : null,
+      vtr: o.totals.videoViews ? o.derived.vtr : null,
+      frequency: o.derived.frequency,
+      cpl: o.totals.leads ? o.derived.cpl : null,
+    })),
+    ...(gT.rows > 0
+      ? [{
+          key: "Google Pesquisa", color: "#e56a2b", spend: gT.spend,
+          cpm: gD.cpm, cpcLink: gD.cpc, ctrLink: gD.ctr,
+          cpv: null, vtr: null, frequency: null, cpl: null,
+        }]
+      : []),
+  ];
+  const cols: Column<CostRow>[] = [
     {
       key: "obj",
       header: "Campanha",
@@ -146,14 +175,14 @@ function Custos() {
       ),
       sortValue: (r) => r.key,
     },
-    { key: "spend", header: "Investido", align: "right", render: (r) => brl(r.totals.spend), sortValue: (r) => r.totals.spend },
-    { key: "cpm", header: "CPM", align: "right", render: (r) => brl(r.derived.cpm), sortValue: (r) => r.derived.cpm },
-    { key: "cpc", header: "CPC link", align: "right", render: (r) => brl(r.derived.cpcLink), sortValue: (r) => r.derived.cpcLink },
-    { key: "ctr", header: "CTR link", align: "right", render: (r) => pct(r.derived.ctrLink), sortValue: (r) => r.derived.ctrLink },
-    { key: "cpv", header: "CPV", align: "right", render: (r) => (r.totals.videoViews ? brl(r.derived.cpv, 3) : "—"), sortValue: (r) => r.derived.cpv },
-    { key: "vtr", header: "VTR", align: "right", render: (r) => (r.totals.videoViews ? pct(r.derived.vtr) : "—"), sortValue: (r) => r.derived.vtr },
-    { key: "freq", header: "Freq.", align: "right", render: (r) => `${dec(r.derived.frequency, 2)}x`, sortValue: (r) => r.derived.frequency },
-    { key: "cpl", header: "CPL", align: "right", render: (r) => (r.totals.leads ? brl(r.derived.cpl) : "—"), sortValue: (r) => r.derived.cpl },
+    { key: "spend", header: "Investido", align: "right", render: (r) => brl(r.spend), sortValue: (r) => r.spend },
+    { key: "cpm", header: "CPM", align: "right", render: (r) => brl(r.cpm), sortValue: (r) => r.cpm },
+    { key: "cpc", header: "CPC", align: "right", render: (r) => brl(r.cpcLink), sortValue: (r) => r.cpcLink },
+    { key: "ctr", header: "CTR", align: "right", render: (r) => pct(r.ctrLink), sortValue: (r) => r.ctrLink },
+    { key: "cpv", header: "CPV", align: "right", render: (r) => (r.cpv != null ? brl(r.cpv, 3) : "—"), sortValue: (r) => r.cpv ?? -1 },
+    { key: "vtr", header: "VTR", align: "right", render: (r) => (r.vtr != null ? pct(r.vtr) : "—"), sortValue: (r) => r.vtr ?? -1 },
+    { key: "freq", header: "Freq.", align: "right", render: (r) => (r.frequency != null ? `${dec(r.frequency, 2)}x` : "—"), sortValue: (r) => r.frequency ?? -1 },
+    { key: "cpl", header: "CPL", align: "right", render: (r) => (r.cpl != null ? brl(r.cpl) : "—"), sortValue: (r) => r.cpl ?? -1 },
   ];
 
   const trendTip = ({ active, payload, label }: any) => {
@@ -170,7 +199,7 @@ function Custos() {
     <div className="space-y-6">
       {/* Metric tiles */}
       <Reveal>
-        <SectionTitle hint="indicadores de custo e eficiência do período">Custos e taxas</SectionTitle>
+        <SectionTitle hint="Meta Ads · indicadores de custo e eficiência do período">Custos e taxas</SectionTitle>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {tiles.map((m) => (
             <Card key={m.l} className="relative overflow-hidden p-4">
@@ -284,9 +313,9 @@ function Custos() {
 
       {/* Full table */}
       <Reveal delay={120}>
-        <SectionTitle hint="ordene por qualquer coluna">Detalhamento de custos por campanha</SectionTitle>
+        <SectionTitle hint="Meta e Google · ordene por qualquer coluna">Detalhamento de custos por campanha</SectionTitle>
         <Card className="p-1.5">
-          <DataTable columns={cols} data={objectives} rowKey={(r) => r.key} initialSort={{ key: "spend", dir: "desc" }} />
+          <DataTable columns={cols} data={costRows} rowKey={(r) => r.key} initialSort={{ key: "spend", dir: "desc" }} />
         </Card>
       </Reveal>
     </div>

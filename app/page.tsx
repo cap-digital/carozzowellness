@@ -25,7 +25,7 @@ import { Dropdown } from "@/components/ui/Dropdown";
 import { makeTooltip, TipShell } from "@/components/charts/ChartTooltip";
 import { sum, derive } from "@/lib/metrics";
 import { dailySeries, objectiveBreakdown, conversionStats } from "@/lib/aggregate";
-import { gSum, gDerive } from "@/lib/google";
+import { gSum, gDerive, gDaily } from "@/lib/google";
 import { brl, int, compact, compactBRL, pct, shortDate } from "@/lib/format";
 import { CHART } from "@/lib/theme";
 import { Eye, Users, MousePointerClick } from "lucide-react";
@@ -84,22 +84,38 @@ function Overview() {
     { name: "Google Pesquisa", color: "#e0a010", spend: gT.spend, impressions: gT.impressions, clicks: gT.clicks, ctr: gD.ctr },
   ];
 
+  // Combined daily spend (Meta + Google) — this is the overview, so all platforms.
   const cumulative = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const p of daily) map.set(p.date, (map.get(p.date) ?? 0) + p.spend);
+    for (const g of gDaily(googleRows)) map.set(g.date, (map.get(g.date) ?? 0) + g.spend);
     let acc = 0;
-    return daily.map((p) => {
-      acc += p.spend;
-      return { ...p, cum: +acc.toFixed(2) };
-    });
-  }, [daily]);
+    return [...map.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, spend]) => {
+        acc += spend;
+        return { date, spend: +spend.toFixed(2), cum: +acc.toFixed(2) };
+      });
+  }, [daily, googleRows]);
 
   const spark = (k: keyof (typeof daily)[number]) => daily.map((p) => Number(p[k]));
 
-  // Delivery funnel — ends at the link click. The three conversion actions are
-  // tracked separately below (never summed into a single "Conversões" total).
+  // Investment split across all campaigns/platforms — Meta objectives + Google.
+  const investSplit = [
+    ...objectives.map((o) => ({ name: o.key, value: o.totals.spend, color: o.color })),
+    ...(gT.spend > 0 ? [{ name: "Google Pesquisa", value: gT.spend, color: "#e56a2b" }] : []),
+  ];
+  // CPM comparison across campaigns/platforms.
+  const cpmSplit = [
+    ...objectives.map((o) => ({ name: o.key, cpm: +o.derived.cpm.toFixed(2), color: o.color })),
+    ...(gT.impressions > 0 ? [{ name: "Google Pesquisa", cpm: +gD.cpm.toFixed(2), color: "#e56a2b" }] : []),
+  ];
+
+  // Delivery funnel — combined across platforms, ends at the link click.
   const funnelStages = [
-    { label: "Impressões", value: t.impressions, color: "#2f80c4" },
-    { label: "Cliques", value: t.clicks, color: "#5a8f22" },
-    { label: "Cliques no link", value: t.linkClicks, color: "#e0a010" },
+    { label: "Impressões", value: t.impressions + gT.impressions, color: "#2f80c4" },
+    { label: "Cliques", value: t.clicks + gT.clicks, color: "#5a8f22" },
+    { label: "Cliques no link", value: t.linkClicks + gT.clicks, color: "#e0a010" },
   ];
 
   const spendLineTip = makeTooltip(
@@ -223,7 +239,7 @@ function Overview() {
 
       {/* Combined bar+line & donut */}
       <Reveal delay={60}>
-        <SectionTitle hint="Meta Ads · ritmo de veiculação e mix de objetivos">Desempenho ao longo do período</SectionTitle>
+        <SectionTitle hint="todas as plataformas · ritmo de veiculação e mix de campanhas">Desempenho ao longo do período</SectionTitle>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <ChartCard
             className="lg:col-span-2"
@@ -273,13 +289,13 @@ function Overview() {
           </ChartCard>
 
           <ChartCard
-            title="Investimento por objetivo"
-            subtitle="Distribuição do gasto entre campanhas"
+            title="Investimento por campanha"
+            subtitle="Distribuição do gasto — Meta e Google"
             accent="#2f80c4"
           >
             <Donut
-              data={objectives.map((o) => ({ name: o.key, value: o.totals.spend, color: o.color }))}
-              centerValue={compactBRL(t.spend)}
+              data={investSplit}
+              centerValue={compactBRL(totalSpend)}
               centerLabel="investimento"
               format={(v) => brl(v, 0)}
               legendBelow
@@ -302,15 +318,15 @@ function Overview() {
           </ChartCard>
 
           <ChartCard
-            title="Custo por mil impressões (CPM) por objetivo"
-            subtitle="Quanto custa alcançar cada público — menor é melhor"
+            title="Custo por mil impressões (CPM) por campanha"
+            subtitle="Quanto custa alcançar cada público — Meta e Google · menor é melhor"
             accent="#b08a3e"
           >
             <div style={{ height: 232 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   layout="vertical"
-                  data={objectives.map((o) => ({ name: o.key, cpm: +o.derived.cpm.toFixed(2), color: o.color }))}
+                  data={cpmSplit}
                   margin={{ top: 4, right: 46, left: 4, bottom: 0 }}
                 >
                   <CartesianGrid horizontal={false} stroke={CHART.grid} />
@@ -334,8 +350,8 @@ function Overview() {
                     content={makeTooltip((_n, v) => ({ label: "CPM", value: brl(v), color: "#b08a3e" }))}
                   />
                   <Bar isAnimationActive={false} dataKey="cpm" radius={[0, 4, 4, 0]} maxBarSize={22}>
-                    {objectives.map((o) => (
-                      <Cell key={o.key} fill={o.color} />
+                    {cpmSplit.map((o) => (
+                      <Cell key={o.name} fill={o.color} />
                     ))}
                     <LabelList
                       dataKey="cpm"

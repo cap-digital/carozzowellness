@@ -56,10 +56,14 @@ function Campanhas() {
 
   const primaryOf = (key: string) => objectives.find((o) => o.key === key)?.primaryValue ?? 0;
 
-  const costPer = objectives
-    .filter((o) => o.primary?.isConversion && o.primaryValue > 0)
-    .map((o) => ({ name: o.key, value: +o.costPerResult.toFixed(2), color: o.color, short: o.primary!.short }))
-    .sort((a, b) => a.value - b.value);
+  // Custo por resultado — Meta: custo por métrica mãe de conversão. Google Search:
+  // o "resultado" é o clique (visita ao site), então custo por resultado = CPC.
+  const costPer = [
+    ...objectives
+      .filter((o) => o.primary?.isConversion && o.primaryValue > 0)
+      .map((o) => ({ name: o.key, value: +o.costPerResult.toFixed(2), color: o.color, short: o.primary!.short })),
+    ...(gT.clicks > 0 ? [{ name: "Google Pesquisa", value: +gD.cpc.toFixed(2), color: "#e56a2b", short: "clique" }] : []),
+  ].sort((a, b) => a.value - b.value);
 
   // Cost display per campaign (CPM for reach/impressions strategy, CPV for views, cost/result otherwise)
   const costInfo = (o: (typeof objectives)[number]) => {
@@ -70,6 +74,14 @@ function Campanhas() {
 
   const funnelStages = (objKey: string, st: Totals): FunnelStage[] => {
     const impressions = { label: "Impressões", value: st.impressions, color: "#2f80c4" };
+    // "Todas as campanhas" = combinado Meta + Google (Google Search não tem
+    // resultado de conversão, então o funil combinado vai até o clique).
+    if (objKey === "all")
+      return [
+        { label: "Impressões", value: st.impressions + gT.impressions, color: "#2f80c4" },
+        { label: "Cliques", value: st.clicks + gT.clicks, color: "#5a8f22" },
+        { label: "Cliques no link", value: st.linkClicks + gT.clicks, color: "#e0a010" },
+      ];
     if (objKey === "ALCANCE")
       return [
         impressions,
@@ -176,7 +188,7 @@ function Campanhas() {
       {/* Summary — each conversion campaign by its métrica mãe */}
       <Reveal>
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <SummaryCard label="Investimento total" value={brl(t.spend, 0)} hint="nas campanhas ativas" color="#465907" />
+          <SummaryCard label="Investimento total" value={brl(t.spend + gT.spend, 0)} hint="Meta + Google · todas as plataformas" color="#465907" />
           <SummaryCard label="WhatsApp" value={int(primaryOf("WHATSAPP"))} hint="campanha WhatsApp" color="#5a8f22" />
           <SummaryCard label="Leads LP" value={int(primaryOf("CONVERSAO-LP"))} hint="campanha Conversão-LP" color="#e0a010" />
           <SummaryCard label="Leads Formulário" value={int(primaryOf("LEAD-ADS"))} hint="campanha Lead-Ads" color="#cf3a5f" />
@@ -219,7 +231,7 @@ function Campanhas() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <ChartCard
             title="Funil de conversão"
-            subtitle={`${brl(st.spend, 0)} investidos · ${selCampaign === "all" ? "todas as campanhas" : selCampaign}`}
+            subtitle={`${brl(selCampaign === "all" ? st.spend + gT.spend : st.spend, 0)} investidos · ${selCampaign === "all" ? "todas as campanhas (Meta + Google)" : selCampaign}`}
             accent={selColor}
             right={
               <Dropdown size="sm" align="right" swatch options={campaignOptions} value={selCampaign} onChange={setSelCampaign} />
@@ -232,7 +244,7 @@ function Campanhas() {
 
           <ChartCard
             title="Custo por resultado por campanha"
-            subtitle="Investimento ÷ métrica mãe — apenas campanhas de conversão"
+            subtitle="Investimento ÷ resultado principal — Meta e Google"
             accent="#b08a3e"
           >
             <div style={{ height: 60 + costPer.length * 60 }}>
@@ -255,7 +267,7 @@ function Campanhas() {
               </ResponsiveContainer>
             </div>
             <div className="mt-1 px-1 text-[11px] text-[var(--text-muted)]">
-              Cada barra usa a métrica principal da campanha (WhatsApp, Leads LP ou Leads Formulário).
+              Cada barra usa o resultado principal da campanha (WhatsApp, Leads LP, Leads Formulário ou clique no Google).
             </div>
           </ChartCard>
         </div>
