@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ApiResponse, Row } from "@/lib/types";
 import { normalize, uniqueDates } from "@/lib/metrics";
+import { normalizeGoogle, gUniqueDates, type GoogleRaw, type GoogleRow } from "@/lib/google";
 
 export type RangeKey = "all" | "7d" | "3d" | "1d";
 
@@ -18,6 +19,7 @@ interface Ctx {
   error: string | null;
   allRows: Row[];
   rows: Row[]; // filtered by range
+  googleRows: GoogleRow[]; // Google Search rows, filtered by range
   dates: string[]; // unique sorted (full dataset)
   activeDates: string[]; // unique sorted (filtered)
   range: RangeKey;
@@ -72,11 +74,23 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return allRows.filter((r) => keep.has(r.date));
   }, [allRows, activeDates, range]);
 
+  // Google Search rows — filtered by range using Google's own date set.
+  const googleAll = useMemo<GoogleRow[]>(
+    () => (raw?.google ? (raw.google as GoogleRaw[]).map(normalizeGoogle) : []),
+    [raw]
+  );
+  const googleRows = useMemo(() => {
+    if (range === "all") return googleAll;
+    const keep = new Set(rangeDates(gUniqueDates(googleAll), range));
+    return googleAll.filter((r) => keep.has(r.date));
+  }, [googleAll, range]);
+
   const value: Ctx = {
     loading,
     error,
     allRows,
     rows,
+    googleRows,
     dates,
     activeDates,
     range,
