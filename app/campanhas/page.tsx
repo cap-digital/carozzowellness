@@ -22,7 +22,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { makeTooltip } from "@/components/charts/ChartTooltip";
 import { sum } from "@/lib/metrics";
 import { objectiveBreakdown } from "@/lib/aggregate";
-import { gByCampaign, type CampaignStat } from "@/lib/google";
+import { gByCampaign, gSum, gDerive, type CampaignStat } from "@/lib/google";
 import { brl, int, pct, resultNum } from "@/lib/format";
 import { CHART } from "@/lib/theme";
 import { cn } from "@/lib/cn";
@@ -49,6 +49,8 @@ function Campanhas() {
   const t = useMemo(() => sum(rows), [rows]);
   const objectives = useMemo(() => objectiveBreakdown(rows), [rows]);
   const googleCampaigns = useMemo(() => gByCampaign(googleRows), [googleRows]);
+  const gT = useMemo(() => gSum(googleRows), [googleRows]);
+  const gD = useMemo(() => gDerive(gT), [gT]);
   const [selCampaign, setSelCampaign] = useState<string>("all");
   const [platform, setPlatform] = useState<string>("meta");
 
@@ -180,6 +182,36 @@ function Campanhas() {
           <SummaryCard label="Leads Formulário" value={int(primaryOf("LEAD-ADS"))} hint="campanha Lead-Ads" color="#cf3a5f" />
         </div>
       </Reveal>
+
+      {/* Google Search campaign — visible without switching tabs */}
+      {gT.rows > 0 && (
+        <Reveal delay={30}>
+          <Card className="relative overflow-hidden">
+            <div className="h-1 w-full" style={{ background: "#e0a010" }} />
+            <div className="flex flex-col gap-3 px-5 py-4 md:flex-row md:items-center">
+              <div className="flex items-center gap-2 md:w-60">
+                <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: "#e0a010" }} />
+                <span className="text-[13px] font-semibold text-[var(--text-primary)]">Google Rede de Pesquisa</span>
+                <span className="rounded-full bg-[#e0a010]/15 px-2 py-0.5 text-[10.5px] font-medium text-[#8f6d29]">Search</span>
+              </div>
+              <div className="grid flex-1 grid-cols-2 gap-x-4 gap-y-3 border-t border-[var(--border)] pt-3 sm:grid-cols-3 md:border-l md:border-t-0 md:pl-6 md:pt-0 lg:grid-cols-5">
+                {[
+                  { l: "Investido", v: brl(gT.spend, 0) },
+                  { l: "Impressões", v: int(gT.impressions) },
+                  { l: "Cliques", v: int(gT.clicks) },
+                  { l: "CTR", v: pct(gD.ctr) },
+                  { l: "CPC", v: brl(gD.cpc) },
+                ].map((s) => (
+                  <div key={s.l}>
+                    <div className="text-[10.5px] uppercase tracking-wide text-[var(--text-muted)]">{s.l}</div>
+                    <div className="mt-0.5 text-[16px] font-semibold tnum text-[var(--text-primary)]">{s.v}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Card>
+        </Reveal>
+      )}
 
       {/* Funnel (selectable) + cost per result */}
       <Reveal delay={60}>
