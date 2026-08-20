@@ -22,7 +22,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { makeTooltip } from "@/components/charts/ChartTooltip";
 import { sum } from "@/lib/metrics";
 import { objectiveBreakdown } from "@/lib/aggregate";
-import { gByCampaign, gSum, gDerive, type CampaignStat } from "@/lib/google";
+import { gaByCampaign, gaSum, gaDerive, type GAdsCampaignStat } from "@/lib/googleAds";
 import { brl, int, pct, resultNum } from "@/lib/format";
 import { CHART } from "@/lib/theme";
 import { cn } from "@/lib/cn";
@@ -45,12 +45,15 @@ export default function CampanhasPage() {
 }
 
 function Campanhas() {
-  const { rows, googleRows, platforms } = useData();
+  const { rows, googleSearchRows, youtubeRows, platforms } = useData();
   const t = useMemo(() => sum(rows), [rows]);
   const objectives = useMemo(() => objectiveBreakdown(rows), [rows]);
-  const googleCampaigns = useMemo(() => gByCampaign(googleRows), [googleRows]);
-  const gT = useMemo(() => gSum(googleRows), [googleRows]);
-  const gD = useMemo(() => gDerive(gT), [gT]);
+  const googleCampaigns = useMemo(() => gaByCampaign(googleSearchRows), [googleSearchRows]);
+  const youtubeCampaigns = useMemo(() => gaByCampaign(youtubeRows), [youtubeRows]);
+  const gT = useMemo(() => gaSum(googleSearchRows), [googleSearchRows]);
+  const gD = useMemo(() => gaDerive(gT), [gT]);
+  const yt = useMemo(() => gaSum(youtubeRows), [youtubeRows]);
+  const yd = useMemo(() => gaDerive(yt), [yt]);
   const [selCampaign, setSelCampaign] = useState<string>("all");
   const [platform, setPlatform] = useState<string>("meta");
 
@@ -63,6 +66,7 @@ function Campanhas() {
       .filter((o) => o.primary?.isConversion && o.primaryValue > 0)
       .map((o) => ({ name: o.key, value: +o.costPerResult.toFixed(2), color: o.color, short: o.primary!.short })),
     ...(gT.clicks > 0 ? [{ name: "Google Pesquisa", value: +gD.cpc.toFixed(2), color: "#e56a2b", short: "clique" }] : []),
+    ...(yt.clicks > 0 ? [{ name: "YouTube", value: +yd.cpc.toFixed(2), color: "#cf3a5f", short: "clique" }] : []),
   ].sort((a, b) => a.value - b.value);
 
   // Cost display per campaign (CPM for reach/impressions strategy, CPV for views, cost/result otherwise)
@@ -74,13 +78,13 @@ function Campanhas() {
 
   const funnelStages = (objKey: string, st: Totals): FunnelStage[] => {
     const impressions = { label: "Impressões", value: st.impressions, color: "#2f80c4" };
-    // "Todas as campanhas" = combinado Meta + Google (Google Search não tem
-    // resultado de conversão, então o funil combinado vai até o clique).
+    // "Todas as campanhas" = combinado de todas as plataformas. Google/YouTube não
+    // têm resultado de conversão, então o funil combinado vai até o clique.
     if (objKey === "all")
       return [
-        { label: "Impressões", value: st.impressions + gT.impressions, color: "#2f80c4" },
-        { label: "Cliques", value: st.clicks + gT.clicks, color: "#5a8f22" },
-        { label: "Cliques no link", value: st.linkClicks + gT.clicks, color: "#e0a010" },
+        { label: "Impressões", value: st.impressions + gT.impressions + yt.impressions, color: "#2f80c4" },
+        { label: "Cliques", value: st.clicks + gT.clicks + yt.clicks, color: "#5a8f22" },
+        { label: "Cliques no link", value: st.linkClicks + gT.clicks + yt.clicks, color: "#e0a010" },
       ];
     if (objKey === "ALCANCE")
       return [
@@ -164,13 +168,13 @@ function Campanhas() {
     },
   ];
 
-  const gcols: Column<CampaignStat>[] = [
+  const campCols = (dot: string): Column<GAdsCampaignStat>[] => [
     {
       key: "camp",
       header: "Campanha",
       render: (r) => (
         <span className="flex items-center gap-2 font-medium text-[var(--text-primary)]">
-          <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: "#e0a010" }} />
+          <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: dot }} />
           {r.campaign}
         </span>
       ),
@@ -183,45 +187,67 @@ function Campanhas() {
     { key: "cpc", header: "CPC", align: "right", render: (r) => brl(r.cpc), sortValue: (r) => r.cpc },
   ];
 
+  // Non-Meta platform summary strips (visible without switching tabs).
+  const platformStrips = [
+    gT.rows > 0 && {
+      label: "Google Rede de Pesquisa", tag: "Search", color: "#e0a010", tagColor: "#8f6d29",
+      stats: [
+        { l: "Investido", v: brl(gT.spend, 0) },
+        { l: "Impressões", v: int(gT.impressions) },
+        { l: "Cliques", v: int(gT.clicks) },
+        { l: "CTR", v: pct(gD.ctr) },
+        { l: "CPC", v: brl(gD.cpc) },
+      ],
+    },
+    yt.rows > 0 && {
+      label: "YouTube", tag: "Vídeo", color: "#cf3a5f", tagColor: "#8f1d38",
+      stats: [
+        { l: "Investido", v: brl(yt.spend, 0) },
+        { l: "Impressões", v: int(yt.impressions) },
+        { l: "Views", v: int(yt.views) },
+        { l: "VTR", v: pct(yd.vtr) },
+        { l: "CPV", v: brl(yd.cpv, 3) },
+      ],
+    },
+  ].filter(Boolean) as { label: string; tag: string; color: string; tagColor: string; stats: { l: string; v: string }[] }[];
+
   return (
     <div className="space-y-6">
       {/* Summary — each conversion campaign by its métrica mãe */}
       <Reveal>
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <SummaryCard label="Investimento total" value={brl(t.spend + gT.spend, 0)} hint="Meta + Google · todas as plataformas" color="#465907" />
+          <SummaryCard label="Investimento total" value={brl(t.spend + gT.spend + yt.spend, 0)} hint="todas as plataformas" color="#465907" />
           <SummaryCard label="WhatsApp" value={int(primaryOf("WHATSAPP"))} hint="campanha WhatsApp" color="#5a8f22" />
           <SummaryCard label="Leads LP" value={int(primaryOf("CONVERSAO-LP"))} hint="campanha Conversão-LP" color="#e0a010" />
           <SummaryCard label="Leads Formulário" value={int(primaryOf("LEAD-ADS"))} hint="campanha Lead-Ads" color="#cf3a5f" />
         </div>
       </Reveal>
 
-      {/* Google Search campaign — visible without switching tabs */}
-      {gT.rows > 0 && (
+      {/* Non-Meta platforms — visible without switching tabs */}
+      {platformStrips.length > 0 && (
         <Reveal delay={30}>
-          <Card className="relative overflow-hidden">
-            <div className="h-1 w-full" style={{ background: "#e0a010" }} />
-            <div className="flex flex-col gap-3 px-5 py-4 md:flex-row md:items-center">
-              <div className="flex items-center gap-2 md:w-60">
-                <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: "#e0a010" }} />
-                <span className="text-[13px] font-semibold text-[var(--text-primary)]">Google Rede de Pesquisa</span>
-                <span className="rounded-full bg-[#e0a010]/15 px-2 py-0.5 text-[10.5px] font-medium text-[#8f6d29]">Search</span>
-              </div>
-              <div className="grid flex-1 grid-cols-2 gap-x-4 gap-y-3 border-t border-[var(--border)] pt-3 sm:grid-cols-3 md:border-l md:border-t-0 md:pl-6 md:pt-0 lg:grid-cols-5">
-                {[
-                  { l: "Investido", v: brl(gT.spend, 0) },
-                  { l: "Impressões", v: int(gT.impressions) },
-                  { l: "Cliques", v: int(gT.clicks) },
-                  { l: "CTR", v: pct(gD.ctr) },
-                  { l: "CPC", v: brl(gD.cpc) },
-                ].map((s) => (
-                  <div key={s.l}>
-                    <div className="text-[10.5px] uppercase tracking-wide text-[var(--text-muted)]">{s.l}</div>
-                    <div className="mt-0.5 text-[16px] font-semibold tnum text-[var(--text-primary)]">{s.v}</div>
+          <div className="space-y-3">
+            {platformStrips.map((p) => (
+              <Card key={p.label} className="relative overflow-hidden">
+                <div className="h-1 w-full" style={{ background: p.color }} />
+                <div className="flex flex-col gap-3 px-5 py-4 md:flex-row md:items-center">
+                  <div className="flex items-center gap-2 md:w-60">
+                    <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: p.color }} />
+                    <span className="text-[13px] font-semibold text-[var(--text-primary)]">{p.label}</span>
+                    <span className="rounded-full px-2 py-0.5 text-[10.5px] font-medium" style={{ background: `${p.color}26`, color: p.tagColor }}>{p.tag}</span>
                   </div>
-                ))}
-              </div>
-            </div>
-          </Card>
+                  <div className="grid flex-1 grid-cols-2 gap-x-4 gap-y-3 border-t border-[var(--border)] pt-3 sm:grid-cols-3 md:border-l md:border-t-0 md:pl-6 md:pt-0 lg:grid-cols-5">
+                    {p.stats.map((s) => (
+                      <div key={s.l}>
+                        <div className="text-[10.5px] uppercase tracking-wide text-[var(--text-muted)]">{s.l}</div>
+                        <div className="mt-0.5 text-[16px] font-semibold tnum text-[var(--text-primary)]">{s.v}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
         </Reveal>
       )}
 
@@ -231,7 +257,7 @@ function Campanhas() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <ChartCard
             title="Funil de conversão"
-            subtitle={`${brl(selCampaign === "all" ? st.spend + gT.spend : st.spend, 0)} investidos · ${selCampaign === "all" ? "todas as campanhas (Meta + Google)" : selCampaign}`}
+            subtitle={`${brl(selCampaign === "all" ? st.spend + gT.spend + yt.spend : st.spend, 0)} investidos · ${selCampaign === "all" ? "todas as campanhas (todas as plataformas)" : selCampaign}`}
             accent={selColor}
             right={
               <Dropdown size="sm" align="right" swatch options={campaignOptions} value={selCampaign} onChange={setSelCampaign} />
@@ -267,7 +293,7 @@ function Campanhas() {
               </ResponsiveContainer>
             </div>
             <div className="mt-1 px-1 text-[11px] text-[var(--text-muted)]">
-              Cada barra usa o resultado principal da campanha (WhatsApp, Leads LP, Leads Formulário ou clique no Google).
+              Cada barra usa o resultado principal da campanha (WhatsApp, Leads LP, Leads Formulário ou clique no Google/YouTube).
             </div>
           </ChartCard>
         </div>
@@ -304,11 +330,13 @@ function Campanhas() {
           </div>
         </div>
 
-        <Card className={platform === "meta" || platform === "google" ? "p-1.5" : ""}>
+        <Card className={platform === "meta" || platform === "google" || platform === "youtube" ? "p-1.5" : ""}>
           {platform === "meta" ? (
             <DataTable columns={cols} data={objectives} rowKey={(r) => r.key} initialSort={{ key: "spend", dir: "desc" }} />
           ) : platform === "google" ? (
-            <DataTable columns={gcols} data={googleCampaigns} rowKey={(r) => r.campaign} initialSort={{ key: "spend", dir: "desc" }} />
+            <DataTable columns={campCols("#e0a010")} data={googleCampaigns} rowKey={(r) => r.campaign} initialSort={{ key: "spend", dir: "desc" }} />
+          ) : platform === "youtube" ? (
+            <DataTable columns={campCols("#cf3a5f")} data={youtubeCampaigns} rowKey={(r) => r.campaign} initialSort={{ key: "spend", dir: "desc" }} />
           ) : (
             <EmptyState
               icon={<Clock size={22} />}

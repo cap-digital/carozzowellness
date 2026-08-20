@@ -20,7 +20,7 @@ import { DataTable, Column } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Badge } from "@/components/ui/Badge";
 import { makeTooltip, TipShell } from "@/components/charts/ChartTooltip";
-import { gSum, gDerive, gDaily, gTermBreakdown, type TermStat } from "@/lib/google";
+import { gaSum, gaDerive, gaDaily, gaTerms } from "@/lib/googleAds";
 import { brl, int, pct, compact, shortDate } from "@/lib/format";
 import { CHART } from "@/lib/theme";
 import { Search, Clock } from "lucide-react";
@@ -37,12 +37,12 @@ export default function GooglePage() {
 }
 
 function Google() {
-  const { googleRows: rows } = useData();
+  const { googleSearchRows: rows, searchTerms } = useData();
 
-  const t = useMemo(() => gSum(rows), [rows]);
-  const d = useMemo(() => gDerive(t), [t]);
-  const daily = useMemo(() => gDaily(rows), [rows]);
-  const terms = useMemo(() => gTermBreakdown(rows), [rows]);
+  const t = useMemo(() => gaSum(rows), [rows]);
+  const d = useMemo(() => gaDerive(t), [t]);
+  const daily = useMemo(() => gaDaily(rows), [rows]);
+  const terms = useMemo(() => gaTerms(searchTerms), [searchTerms]);
 
   const topByClicks = useMemo(
     () => terms.filter((x) => x.clicks > 0).slice().sort((a, b) => b.clicks - a.clicks).slice(0, 10),
@@ -55,8 +55,8 @@ function Google() {
       <EmptyState
         icon={<Clock size={22} />}
         color={GOLD}
-        title="Google Rede de Pesquisa em breve"
-        description="Assim que a conta de Google for integrada, as campanhas de Search e seus termos de pesquisa aparecem aqui."
+        title="Sem dados do Google no período"
+        description="A integração com a Google Ads API está ativa, mas não há dados de Search no período selecionado (ou a API está indisponível no momento)."
       />
     );
   }
@@ -77,7 +77,7 @@ function Google() {
     );
   };
 
-  type TRow = TermStat;
+  type TRow = (typeof terms)[number];
   const cols: Column<TRow>[] = [
     {
       key: "term",

@@ -22,7 +22,7 @@ import { DataTable, Column } from "@/components/ui/DataTable";
 import { makeTooltip, TipShell } from "@/components/charts/ChartTooltip";
 import { sum, derive, byDate } from "@/lib/metrics";
 import { objectiveBreakdown, conversionStats } from "@/lib/aggregate";
-import { gSum, gDerive } from "@/lib/google";
+import { gaSum, gaDerive } from "@/lib/googleAds";
 import { brl, int, pct, dec, compactBRL, shortDate } from "@/lib/format";
 import { CHART } from "@/lib/theme";
 
@@ -62,20 +62,38 @@ const OBJ_METRICS: { key: string; label: string; kind: Kind }[] = [
 ];
 
 function Custos() {
-  const { rows, googleRows } = useData();
+  const { rows, googleSearchRows, youtubeRows } = useData();
   const t = useMemo(() => sum(rows), [rows]);
   const d = useMemo(() => derive(t), [t]);
   const objectives = useMemo(() => objectiveBreakdown(rows), [rows]);
-  // Google Search cost/rate metrics
-  const gT = useMemo(() => gSum(googleRows), [googleRows]);
-  const gD = useMemo(() => gDerive(gT), [gT]);
-  const googleTiles = [
-    { l: "Investido", v: brl(gT.spend, 0), hint: "total na Rede de Pesquisa" },
-    { l: "CPC", v: brl(gD.cpc), hint: "custo por clique" },
-    { l: "CTR", v: pct(gD.ctr), hint: "taxa de cliques" },
-    { l: "CPM", v: brl(gD.cpm), hint: "custo por mil impressões" },
-    { l: "Cliques", v: int(gT.clicks), hint: `de ${int(gT.impressions)} impressões` },
-  ];
+  // Google Ads cost/rate metrics (Search + YouTube)
+  const gT = useMemo(() => gaSum(googleSearchRows), [googleSearchRows]);
+  const gD = useMemo(() => gaDerive(gT), [gT]);
+  const yt = useMemo(() => gaSum(youtubeRows), [youtubeRows]);
+  const yd = useMemo(() => gaDerive(yt), [yt]);
+  // Cost sections per non-Meta platform (only rendered when they have data).
+  const adsSections = [
+    gT.rows > 0 && {
+      label: "Google Rede de Pesquisa", color: "#e0a010",
+      tiles: [
+        { l: "Investido", v: brl(gT.spend, 0), hint: "total na Rede de Pesquisa" },
+        { l: "CPC", v: brl(gD.cpc), hint: "custo por clique" },
+        { l: "CTR", v: pct(gD.ctr), hint: "taxa de cliques" },
+        { l: "CPM", v: brl(gD.cpm), hint: "custo por mil impressões" },
+        { l: "Cliques", v: int(gT.clicks), hint: `de ${int(gT.impressions)} impressões` },
+      ],
+    },
+    yt.rows > 0 && {
+      label: "YouTube", color: "#cf3a5f",
+      tiles: [
+        { l: "Investido", v: brl(yt.spend, 0), hint: "total em vídeo" },
+        { l: "CPV", v: brl(yd.cpv, 3), hint: "custo por view (TrueView)" },
+        { l: "VTR", v: pct(yd.vtr), hint: "views ÷ impressões" },
+        { l: "CPM", v: brl(yd.cpm), hint: "custo por mil impressões" },
+        { l: "Views", v: int(yt.views), hint: `de ${int(yt.impressions)} impressões` },
+      ],
+    },
+  ].filter(Boolean) as { label: string; color: string; tiles: { l: string; v: string; hint: string }[] }[];
   // Cost per conversion action, each from its OWN campaign strategy's spend.
   const cs = useMemo(() => {
     const m = new Map(conversionStats(rows).map((s) => [s.key, s]));
@@ -111,13 +129,17 @@ function Custos() {
 
   const objBars = useMemo(() => {
     const meta = objectives.map((o) => ({ name: o.key, value: +((o.derived as any)[om.key] as number).toFixed(2), color: o.color }));
-    // Google Search only has cpm/cpc/ctr (no video → no CPV).
+    // Google Search: cpm/cpc/ctr (no video → no CPV). YouTube: also CPV (has views).
     const gVal = ({ cpm: gD.cpm, cpcLink: gD.cpc, ctrLink: gD.ctr, cpv: 0 } as Record<string, number>)[om.key] ?? 0;
-    const google = gT.rows > 0 && gVal > 0 ? [{ name: "Google Pesquisa", value: +gVal.toFixed(2), color: "#e56a2b" }] : [];
-    return [...meta, ...google]
+    const yVal = ({ cpm: yd.cpm, cpcLink: yd.cpc, ctrLink: yd.ctr, cpv: yd.cpv } as Record<string, number>)[om.key] ?? 0;
+    const extra = [
+      ...(gT.rows > 0 && gVal > 0 ? [{ name: "Google Pesquisa", value: +gVal.toFixed(2), color: "#e56a2b" }] : []),
+      ...(yt.rows > 0 && yVal > 0 ? [{ name: "YouTube", value: +yVal.toFixed(2), color: "#cf3a5f" }] : []),
+    ];
+    return [...meta, ...extra]
       .filter((r) => isFinite(r.value) && r.value > 0)
       .sort((a, b) => (om.kind === "pct" ? b.value - a.value : a.value - b.value));
-  }, [objectives, om, gT, gD]);
+  }, [objectives, om, gT, gD, yt, yd]);
 
   // CPV/VTR pertencem à campanha de vídeo — calcular com o gasto e as impressões
   // DELA, não com o investimento total ÷ views (que inflaria o custo).
@@ -160,6 +182,13 @@ function Custos() {
           key: "Google Pesquisa", color: "#e56a2b", spend: gT.spend,
           cpm: gD.cpm, cpcLink: gD.cpc, ctrLink: gD.ctr,
           cpv: null, vtr: null, frequency: null, cpl: null,
+        }]
+      : []),
+    ...(yt.rows > 0
+      ? [{
+          key: "YouTube", color: "#cf3a5f", spend: yt.spend,
+          cpm: yd.cpm, cpcLink: yd.cpc, ctrLink: yd.ctr,
+          cpv: yt.views ? yd.cpv : null, vtr: yt.views ? yd.vtr : null, frequency: null, cpl: null,
         }]
       : []),
   ];
@@ -222,14 +251,14 @@ function Custos() {
         </Card>
       </Reveal>
 
-      {/* Google Search costs */}
-      {gT.rows > 0 && (
-        <Reveal delay={40}>
-          <SectionTitle hint="rede de pesquisa · custo por clique e impressão">Custos — Google Rede de Pesquisa</SectionTitle>
+      {/* Google Ads costs (Search + YouTube) */}
+      {adsSections.map((sec, i) => (
+        <Reveal key={sec.label} delay={40 + i * 30}>
+          <SectionTitle hint="Google Ads · custo e eficiência do canal">Custos — {sec.label}</SectionTitle>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            {googleTiles.map((m) => (
+            {sec.tiles.map((m) => (
               <Card key={m.l} className="relative overflow-hidden p-4">
-                <span className="absolute left-0 top-4 h-7 w-[3px] rounded-full" style={{ background: "#e0a010" }} />
+                <span className="absolute left-0 top-4 h-7 w-[3px] rounded-full" style={{ background: sec.color }} />
                 <div className="pl-2 text-[12px] font-medium text-[var(--text-secondary)]">{m.l}</div>
                 <div className="mt-1.5 pl-2 text-[23px] font-semibold leading-none tnum text-[var(--text-primary)]">{m.v}</div>
                 <div className="mt-1.5 pl-2 text-[11px] text-[var(--text-muted)]">{m.hint}</div>
@@ -237,7 +266,7 @@ function Custos() {
             ))}
           </div>
         </Reveal>
-      )}
+      ))}
 
       {/* Trend + per-objective */}
       <Reveal delay={60}>

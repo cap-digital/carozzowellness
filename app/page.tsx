@@ -25,7 +25,8 @@ import { Dropdown } from "@/components/ui/Dropdown";
 import { makeTooltip, TipShell } from "@/components/charts/ChartTooltip";
 import { sum, derive } from "@/lib/metrics";
 import { dailySeries, objectiveBreakdown, conversionStats } from "@/lib/aggregate";
-import { gSum, gDerive, gDaily } from "@/lib/google";
+import { gaSum, gaDerive, gaDaily } from "@/lib/googleAds";
+import { platformAggs, combinedTotals, combinedDailySpend } from "@/lib/combined";
 import { brl, int, compact, compactBRL, pct, shortDate } from "@/lib/format";
 import { CHART } from "@/lib/theme";
 import { Eye, Users, MousePointerClick } from "lucide-react";
@@ -67,7 +68,7 @@ export default function OverviewPage() {
 }
 
 function Overview() {
-  const { rows, googleRows } = useData();
+  const { rows, googleSearchRows, youtubeRows } = useData();
 
   const t = useMemo(() => sum(rows), [rows]);
   const d = useMemo(() => derive(t), [t]);
@@ -75,47 +76,45 @@ function Overview() {
   const objectives = useMemo(() => objectiveBreakdown(rows), [rows]);
   const convStats = useMemo(() => conversionStats(rows), [rows]);
 
-  // Cross-platform: Meta + Google Search
-  const gT = useMemo(() => gSum(googleRows), [googleRows]);
-  const gD = useMemo(() => gDerive(gT), [gT]);
-  const totalSpend = t.spend + gT.spend;
-  const platforms = [
-    { name: "Meta Ads", color: "#2f80c4", spend: t.spend, impressions: t.impressions, clicks: t.linkClicks, ctr: d.ctrLink },
-    { name: "Google Pesquisa", color: "#e0a010", spend: gT.spend, impressions: gT.impressions, clicks: gT.clicks, ctr: gD.ctr },
-  ];
+  // Cross-platform: Meta + Programática + Google Search + YouTube
+  const aggs = useMemo(() => platformAggs(t, googleSearchRows, youtubeRows), [t, googleSearchRows, youtubeRows]);
+  const gSearch = useMemo(() => gaSum(googleSearchRows), [googleSearchRows]);
+  const yt = useMemo(() => gaSum(youtubeRows), [youtubeRows]);
+  const combined = combinedTotals(aggs);
+  const totalSpend = combined.spend;
+  const platforms = aggs; // Meta, Google, YouTube, Programática (zeros)
 
-  // Combined daily spend (Meta + Google) — this is the overview, so all platforms.
+  // Combined daily spend across all platforms.
   const cumulative = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const p of daily) map.set(p.date, (map.get(p.date) ?? 0) + p.spend);
-    for (const g of gDaily(googleRows)) map.set(g.date, (map.get(g.date) ?? 0) + g.spend);
+    const merged = combinedDailySpend(daily, gaDaily(googleSearchRows), gaDaily(youtubeRows));
     let acc = 0;
-    return [...map.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([date, spend]) => {
-        acc += spend;
-        return { date, spend: +spend.toFixed(2), cum: +acc.toFixed(2) };
-      });
-  }, [daily, googleRows]);
+    return merged.map((p) => {
+      acc += p.spend;
+      return { date: p.date, spend: p.spend, cum: +acc.toFixed(2) };
+    });
+  }, [daily, googleSearchRows, youtubeRows]);
 
   const spark = (k: keyof (typeof daily)[number]) => daily.map((p) => Number(p[k]));
 
-  // Investment split across all campaigns/platforms — Meta objectives + Google.
+  // Investment split — Meta objectives + Google Search + YouTube as their own slices.
   const investSplit = [
     ...objectives.map((o) => ({ name: o.key, value: o.totals.spend, color: o.color })),
-    ...(gT.spend > 0 ? [{ name: "Google Pesquisa", value: gT.spend, color: "#e56a2b" }] : []),
+    ...(gSearch.spend > 0 ? [{ name: "Google Pesquisa", value: gSearch.spend, color: "#e56a2b" }] : []),
+    ...(yt.spend > 0 ? [{ name: "YouTube", value: yt.spend, color: "#cf3a5f" }] : []),
   ];
   // CPM comparison across campaigns/platforms.
+  const gSd = gaDerive(gSearch), ytd = gaDerive(yt);
   const cpmSplit = [
     ...objectives.map((o) => ({ name: o.key, cpm: +o.derived.cpm.toFixed(2), color: o.color })),
-    ...(gT.impressions > 0 ? [{ name: "Google Pesquisa", cpm: +gD.cpm.toFixed(2), color: "#e56a2b" }] : []),
+    ...(gSearch.impressions > 0 ? [{ name: "Google Pesquisa", cpm: +gSd.cpm.toFixed(2), color: "#e56a2b" }] : []),
+    ...(yt.impressions > 0 ? [{ name: "YouTube", cpm: +ytd.cpm.toFixed(2), color: "#cf3a5f" }] : []),
   ];
 
-  // Delivery funnel — combined across platforms, ends at the link click.
+  // Delivery funnel — combined impressions/clicks across all platforms.
   const funnelStages = [
-    { label: "Impressões", value: t.impressions + gT.impressions, color: "#2f80c4" },
-    { label: "Cliques", value: t.clicks + gT.clicks, color: "#5a8f22" },
-    { label: "Cliques no link", value: t.linkClicks + gT.clicks, color: "#e0a010" },
+    { label: "Impressões", value: combined.impressions, color: "#2f80c4" },
+    { label: "Cliques", value: t.clicks + gSearch.clicks + yt.clicks, color: "#5a8f22" },
+    { label: "Cliques no link", value: combined.clicks, color: "#e0a010" },
   ];
 
   const spendLineTip = makeTooltip(
@@ -156,8 +155,7 @@ function Overview() {
                 {brl(totalSpend)}
               </p>
               <p className="mt-3 text-[12.5px] text-white/55">
-                Meta {compactBRL(t.spend)} · Google {compactBRL(gT.spend)}
-                {daily.length > 0 && ` · ${daily.length} dias`}
+                Meta {compactBRL(t.spend)} · Google {compactBRL(gSearch.spend)} · YouTube {compactBRL(yt.spend)}
               </p>
             </div>
           </div>
@@ -211,29 +209,36 @@ function Overview() {
       {/* Per-platform summary */}
       <Reveal delay={40}>
         <SectionTitle hint="investimento e entrega por canal">Por plataforma</SectionTitle>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {platforms.map((p) => (
-            <Card key={p.name} className="relative overflow-hidden p-4">
-              <span className="absolute left-0 top-4 h-9 w-[3px] rounded-full" style={{ background: p.color }} />
-              <div className="flex items-center gap-2 pl-2">
-                <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: p.color }} />
-                <span className="text-[13px] font-semibold text-[var(--text-primary)]">{p.name}</span>
-                <span className="ml-auto text-[15px] font-semibold tnum text-[var(--text-primary)]">{brl(p.spend, 0)}</span>
-              </div>
-              <div className="mt-3 grid grid-cols-3 gap-2 pl-2">
-                {[
-                  { l: "Impressões", v: compact(p.impressions) },
-                  { l: "Cliques", v: int(p.clicks) },
-                  { l: "CTR", v: pct(p.ctr) },
-                ].map((s) => (
-                  <div key={s.l}>
-                    <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">{s.l}</div>
-                    <div className="mt-0.5 text-[14px] font-semibold tnum text-[var(--text-primary)]">{s.v}</div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {platforms.map((p) => {
+            const empty = p.spend === 0 && p.impressions === 0;
+            return (
+              <Card key={p.key} className="relative overflow-hidden p-4">
+                <span className="absolute left-0 top-4 h-9 w-[3px] rounded-full" style={{ background: p.color }} />
+                <div className="flex items-center gap-2 pl-2">
+                  <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: p.color }} />
+                  <span className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{p.label}</span>
+                  <span className="ml-auto text-[15px] font-semibold tnum text-[var(--text-primary)]">{brl(p.spend, 0)}</span>
+                </div>
+                {empty ? (
+                  <div className="mt-3 pl-2 text-[11.5px] text-[var(--text-muted)]">Sem dados no período</div>
+                ) : (
+                  <div className="mt-3 grid grid-cols-3 gap-2 pl-2">
+                    {[
+                      { l: "Impressões", v: compact(p.impressions) },
+                      { l: "Cliques", v: int(p.clicks) },
+                      { l: "CTR", v: pct(p.ctr) },
+                    ].map((s) => (
+                      <div key={s.l}>
+                        <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">{s.l}</div>
+                        <div className="mt-0.5 text-[14px] font-semibold tnum text-[var(--text-primary)]">{s.v}</div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </Card>
-          ))}
+                )}
+              </Card>
+            );
+          })}
         </div>
       </Reveal>
 

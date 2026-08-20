@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ApiResponse, Row } from "@/lib/types";
 import { normalize, uniqueDates } from "@/lib/metrics";
-import { normalizeGoogle, gUniqueDates, type GoogleRaw, type GoogleRow } from "@/lib/google";
+import { gaUniqueDates, type GAdsResponse, type GAdsRow, type GAdsTermRow } from "@/lib/googleAds";
 
 export type RangeKey = "all" | "7d" | "3d" | "1d";
 
@@ -18,9 +18,12 @@ interface Ctx {
   loading: boolean;
   error: string | null;
   allRows: Row[];
-  rows: Row[]; // filtered by range
-  googleRows: GoogleRow[]; // Google Search rows, filtered by range
-  dates: string[]; // unique sorted (full dataset)
+  rows: Row[]; // Meta rows filtered by range (edge function)
+  googleSearchRows: GAdsRow[]; // Google Search (Ads API), filtered by range
+  youtubeRows: GAdsRow[]; // YouTube (Ads API), filtered by range
+  searchTerms: GAdsTermRow[]; // Search terms (aggregated over the API window)
+  googleError: string | null; // Google Ads layer failed (Meta still works)
+  dates: string[]; // unique sorted union across platforms (full)
   activeDates: string[]; // unique sorted (filtered)
   range: RangeKey;
   setRange: (r: RangeKey) => void;
@@ -31,6 +34,8 @@ interface Ctx {
 
 const DataCtx = createContext<Ctx | null>(null);
 
+const EMPTY_GADS: GAdsResponse = { success: false, rows: [], searchTerms: [] };
+
 function rangeDates(all: string[], range: RangeKey): string[] {
   if (range === "all" || all.length === 0) return all;
   const n = range === "7d" ? 7 : range === "3d" ? 3 : 1;
@@ -39,6 +44,7 @@ function rangeDates(all: string[], range: RangeKey): string[] {
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const [raw, setRaw] = useState<ApiResponse | null>(null);
+  const [gads, setGads] = useState<GAdsResponse>(EMPTY_GADS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [range, setRange] = useState<RangeKey>("all");
@@ -47,12 +53,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    fetch("/api/meta")
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: ApiResponse) => {
+    Promise.all([
+      // Meta + Programática (edge). This one is required.
+      fetch("/api/meta").then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))),
+      // Google Search + YouTube (Google Ads API). Optional — degrade gracefully.
+      fetch("/api/google-ads")
+        .then((r) => r.json())
+        .catch(() => EMPTY_GADS),
+    ])
+      .then(([meta, g]: [ApiResponse, GAdsResponse]) => {
         if (!alive) return;
-        if (!d.success) throw new Error("Resposta sem sucesso");
-        setRaw(d);
+        if (!meta.success) throw new Error("Resposta sem sucesso");
+        setRaw(meta);
+        setGads(g && Array.isArray(g.rows) ? g : EMPTY_GADS);
         setError(null);
       })
       .catch((e) => alive && setError(e.message))
@@ -62,35 +75,46 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     };
   }, [nonce]);
 
-  const allRows = useMemo<Row[]>(
-    () => (raw?.meta ? raw.meta.map(normalize) : []),
-    [raw]
-  );
-  const dates = useMemo(() => uniqueDates(allRows), [allRows]);
+  const allRows = useMemo<Row[]>(() => (raw?.meta ? raw.meta.map(normalize) : []), [raw]);
+  const gadsRows = gads.rows;
+
+  // Unified date window across all platforms so the range filter is consistent.
+  const dates = useMemo(() => {
+    const metaDates = uniqueDates(allRows);
+    const gDates = gaUniqueDates(gadsRows);
+    return [...new Set([...metaDates, ...gDates])].sort();
+  }, [allRows, gadsRows]);
   const activeDates = useMemo(() => rangeDates(dates, range), [dates, range]);
+
   const rows = useMemo(() => {
     if (range === "all") return allRows;
     const keep = new Set(activeDates);
     return allRows.filter((r) => keep.has(r.date));
   }, [allRows, activeDates, range]);
 
-  // Google Search rows — filtered by range using Google's own date set.
-  const googleAll = useMemo<GoogleRow[]>(
-    () => (raw?.google ? (raw.google as GoogleRaw[]).map(normalizeGoogle) : []),
-    [raw]
+  const inRange = useMemo(() => {
+    const keep = new Set(activeDates);
+    return (r: GAdsRow) => range === "all" || keep.has(r.date);
+  }, [activeDates, range]);
+
+  const googleSearchRows = useMemo(
+    () => gadsRows.filter((r) => r.channel === "search" && inRange(r)),
+    [gadsRows, inRange]
   );
-  const googleRows = useMemo(() => {
-    if (range === "all") return googleAll;
-    const keep = new Set(rangeDates(gUniqueDates(googleAll), range));
-    return googleAll.filter((r) => keep.has(r.date));
-  }, [googleAll, range]);
+  const youtubeRows = useMemo(
+    () => gadsRows.filter((r) => r.channel === "youtube" && inRange(r)),
+    [gadsRows, inRange]
+  );
 
   const value: Ctx = {
     loading,
     error,
     allRows,
     rows,
-    googleRows,
+    googleSearchRows,
+    youtubeRows,
+    searchTerms: gads.searchTerms ?? [],
+    googleError: gads.success ? null : gads.error ?? null,
     dates,
     activeDates,
     range,
@@ -98,8 +122,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     updatedAt: raw?.timestamp ?? null,
     platforms: {
       meta: raw?.meta?.length ?? 0,
-      google: raw?.google?.length ?? 0,
-      youtube: raw?.youtube?.length ?? 0,
+      google: gadsRows.filter((r) => r.channel === "search").length,
+      youtube: gadsRows.filter((r) => r.channel === "youtube").length,
       programatica: raw?.programatica?.length ?? 0,
     },
     refresh: () => setNonce((n) => n + 1),
