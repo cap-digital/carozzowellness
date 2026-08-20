@@ -23,7 +23,8 @@ import { ChartCard, SectionTitle, Card } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/Segmented";
 import { Badge } from "@/components/ui/Badge";
 import { PlatformFilter, type FilterKey } from "@/components/ui/PlatformFilter";
-import type { GAdsCreative } from "@/lib/googleAds";
+import { Funnel } from "@/components/charts/Funnel";
+import { gaSum, gaDerive, type GAdsCreative } from "@/lib/googleAds";
 import { makeTooltip, TipShell } from "@/components/charts/ChartTooltip";
 import { sum } from "@/lib/metrics";
 import { adBreakdown, formatBreakdown } from "@/lib/aggregate";
@@ -50,13 +51,31 @@ export default function CriativosPage() {
 type SortKey = "spend" | "ctr" | "impressions" | "conv";
 
 function Criativos() {
-  const { rows, youtubeCreatives } = useData();
+  const { rows, youtubeCreatives, youtubeRows, videoRetention } = useData();
   const [sortKey, setSortKey] = useState<SortKey>("spend");
   const [platform, setPlatform] = useState<FilterKey>("all");
 
   const t = useMemo(() => sum(rows), [rows]);
   const creatives = useMemo(() => adBreakdown(rows), [rows]);
   const formats = useMemo(() => formatBreakdown(rows), [rows]);
+
+  // YouTube (video) creative analysis — counted here whenever it's video, not static.
+  const yt = useMemo(() => gaSum(youtubeRows), [youtubeRows]);
+  const yd = useMemo(() => gaDerive(yt), [yt]);
+  const ytFunnel = [
+    { label: "Impressões", value: yt.impressions, color: "#cf3a5f" },
+    { label: "Views (TrueView)", value: yt.views, color: "#14a58c" },
+    { label: "Cliques", value: yt.clicks, color: "#e0a010" },
+  ];
+  const ytRetention = videoRetention
+    ? [
+        { depth: "Início", value: 100 },
+        { depth: "25%", value: videoRetention.p25 },
+        { depth: "50%", value: videoRetention.p50 },
+        { depth: "75%", value: videoRetention.p75 },
+        { depth: "100%", value: videoRetention.p100 },
+      ]
+    : [];
 
   // Only platforms with creative data. Google Search has none; YouTube has video ads.
   const filterOptions = [
@@ -279,6 +298,70 @@ function Criativos() {
       </Reveal>
 
       </>
+      )}
+
+      {/* YouTube (video) analysis — shows in "Todas" and "YouTube" */}
+      {showYoutube && (
+        <>
+          <Reveal delay={40}>
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+              <Card className="p-4">
+                <div className="text-[12px] text-[var(--text-secondary)]">Criativos de vídeo</div>
+                <div className="mt-1 text-[26px] font-semibold text-[var(--text-primary)]">{youtubeCreatives.length}</div>
+                <div className="mt-1 text-[11.5px] text-[var(--text-muted)]">anúncios no YouTube</div>
+              </Card>
+              <Card className="p-4">
+                <div className="text-[12px] text-[var(--text-secondary)]">Views</div>
+                <div className="mt-1 text-[26px] font-semibold" style={{ color: "#14a58c" }}>{compact(yt.views)}</div>
+                <div className="mt-1 text-[11.5px] text-[var(--text-muted)]">de {compact(yt.impressions)} impressões</div>
+              </Card>
+              <Card className="p-4">
+                <div className="text-[12px] text-[var(--text-secondary)]">VTR</div>
+                <div className="mt-1 text-[26px] font-semibold text-[var(--text-primary)]">{pct(yd.vtr)}</div>
+                <div className="mt-1 text-[11.5px] text-[var(--text-muted)]">taxa de visualização</div>
+              </Card>
+              <Card className="p-4">
+                <div className="text-[12px] text-[var(--text-secondary)]">Retenção 100%</div>
+                <div className="mt-1 text-[26px] font-semibold text-[var(--text-primary)]">{videoRetention ? pct(videoRetention.p100, 1) : "—"}</div>
+                <div className="mt-1 text-[11.5px] text-[var(--text-muted)]">assiste o vídeo até o fim</div>
+              </Card>
+            </div>
+          </Reveal>
+
+          <Reveal delay={80}>
+            <SectionTitle hint="funil e retenção dos anúncios de vídeo">Desempenho de vídeo · YouTube</SectionTitle>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <ChartCard title="Funil de vídeo" subtitle="Da impressão à view e ao clique" accent="#cf3a5f">
+                <div className="pt-1">
+                  <Funnel stages={ytFunnel} />
+                </div>
+              </ChartCard>
+              <ChartCard title="Curva de retenção" subtitle="% das reproduções que chega a cada ponto do vídeo" accent="#14a58c">
+                {ytRetention.length ? (
+                  <div style={{ height: 220 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={ytRetention} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="crRet" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#14a58c" stopOpacity={0.28} />
+                            <stop offset="100%" stopColor="#14a58c" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid vertical={false} stroke={CHART.grid} />
+                        <XAxis dataKey="depth" tick={{ fontSize: 11, fill: CHART.textMuted }} tickLine={false} axisLine={{ stroke: CHART.axis }} />
+                        <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11, fill: CHART.textMuted }} tickLine={false} axisLine={false} width={38} domain={[0, 100]} />
+                        <Tooltip content={makeTooltip((_n, v) => ({ label: "Retenção", value: pct(v, 1), color: "#14a58c" }))} />
+                        <Area isAnimationActive={false} type="monotone" dataKey="value" stroke="#14a58c" strokeWidth={2.5} fill="url(#crRet)" dot={{ r: 3, fill: "#14a58c", stroke: "var(--surface-1)", strokeWidth: 2 }} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="flex h-[220px] items-center justify-center text-[12.5px] text-[var(--text-muted)]">Sem dados de retenção no período</div>
+                )}
+              </ChartCard>
+            </div>
+          </Reveal>
+        </>
       )}
 
       {/* Gallery */}

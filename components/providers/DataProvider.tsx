@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ApiResponse, Row } from "@/lib/types";
 import { normalize, uniqueDates } from "@/lib/metrics";
-import { gaUniqueDates, type GAdsCreative, type GAdsResponse, type GAdsRetention, type GAdsRow, type GAdsTermRow } from "@/lib/googleAds";
+import { gaUniqueDates, type GAdsCreative, type GAdsDemographics, type GAdsResponse, type GAdsRetention, type GAdsRow, type GAdsTermRow } from "@/lib/googleAds";
 
 export type RangeKey = "all" | "7d" | "3d" | "1d";
 
@@ -24,6 +24,7 @@ interface Ctx {
   searchTerms: GAdsTermRow[]; // Search terms (aggregated over the API window)
   videoRetention: GAdsRetention | null; // YouTube quartile retention
   youtubeCreatives: GAdsCreative[]; // YouTube video creatives
+  demographics: GAdsDemographics | null; // Google/YouTube age + gender
   googleLoading: boolean; // Google Ads layer still loading (Meta already rendered)
   googleError: string | null; // Google Ads layer failed (Meta still works)
   dates: string[]; // unique sorted union across platforms (full)
@@ -126,6 +127,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     searchTerms: gads.searchTerms ?? [],
     videoRetention: gads.videoRetention ?? null,
     youtubeCreatives: gads.youtubeCreatives ?? [],
+    demographics: gads.demographics ?? null,
     googleLoading,
     googleError: gads.success ? null : gads.error ?? null,
     dates,

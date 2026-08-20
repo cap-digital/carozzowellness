@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { OAuth2Client } from "google-auth-library";
-import type { GAdsChannel, GAdsCreative, GAdsResponse, GAdsRetention, GAdsRow, GAdsTermRow } from "@/lib/googleAds";
+import type { GAdsChannel, GAdsCreative, GAdsDemoBucket, GAdsDemographics, GAdsResponse, GAdsRetention, GAdsRow, GAdsTermRow } from "@/lib/googleAds";
 
 // Server-side Google Ads API integration (v25) for Carozzo Wellness.
 // Channels: Search ([ID3] [SEARCH] …) and YouTube ([ID3] [YOUTUBE] …, Video).
@@ -88,8 +88,8 @@ export async function GET() {
     const token = await accessToken();
     const range = dateRange();
 
-    // The four queries are independent — run them in parallel to cut latency.
-    const [campaignRows, termRows, retRows, adRows] = await Promise.all([
+    // These queries are independent — run them in parallel to cut latency.
+    const [campaignRows, termRows, retRows, adRows, ageRows, genderRows] = await Promise.all([
       gaqlSearch(
         token,
         `SELECT campaign.name, campaign.advertising_channel_type, segments.date,
@@ -117,6 +117,18 @@ export async function GET() {
                 metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.video_trueview_views
          FROM ad_group_ad
          WHERE ${CAMPAIGN_FILTER} AND campaign.advertising_channel_type = 'VIDEO' AND ${range}`
+      ),
+      gaqlSearch(
+        token,
+        `SELECT campaign.advertising_channel_type, ad_group_criterion.age_range.type,
+                metrics.impressions, metrics.clicks
+         FROM age_range_view WHERE ${CAMPAIGN_FILTER} AND ${range}`
+      ),
+      gaqlSearch(
+        token,
+        `SELECT campaign.advertising_channel_type, ad_group_criterion.gender.type,
+                metrics.impressions, metrics.clicks
+         FROM gender_view WHERE ${CAMPAIGN_FILTER} AND ${range}`
       ),
     ]);
 
@@ -199,7 +211,40 @@ export async function GET() {
       })
       .sort((a, b) => b.spend - a.spend);
 
-    const body: GAdsResponse = { success: true, rows, searchTerms, videoRetention, youtubeCreatives, timestamp: new Date().toISOString() };
+    // Demographics (age + gender) per channel. Buckets normalized to match Meta's.
+    const AGE_MAP: Record<string, string> = {
+      AGE_RANGE_18_24: "18-24", AGE_RANGE_25_34: "25-34", AGE_RANGE_35_44: "35-44",
+      AGE_RANGE_45_54: "45-54", AGE_RANGE_55_64: "55-64", AGE_RANGE_65_UP: "65+",
+      AGE_RANGE_UNDETERMINED: "Unknown",
+    };
+    const GENDER_MAP: Record<string, string> = { MALE: "male", FEMALE: "female", UNDETERMINED: "unknown" };
+    const demoAcc = {
+      search: { age: new Map<string, GAdsDemoBucket>(), gender: new Map<string, GAdsDemoBucket>() },
+      youtube: { age: new Map<string, GAdsDemoBucket>(), gender: new Map<string, GAdsDemoBucket>() },
+    };
+    const addDemo = (map: Map<string, GAdsDemoBucket>, key: string, m: any) => {
+      const b = map.get(key) ?? { key, impressions: 0, clicks: 0 };
+      b.impressions += num(m?.impressions);
+      b.clicks += num(m?.clicks);
+      map.set(key, b);
+    };
+    for (const r of ageRows) {
+      const ch = channelOf(r.campaign?.advertisingChannelType);
+      if (!ch) continue;
+      addDemo(demoAcc[ch].age, AGE_MAP[r.adGroupCriterion?.ageRange?.type] ?? "Unknown", r.metrics);
+    }
+    for (const r of genderRows) {
+      const ch = channelOf(r.campaign?.advertisingChannelType);
+      if (!ch) continue;
+      addDemo(demoAcc[ch].gender, GENDER_MAP[r.adGroupCriterion?.gender?.type] ?? "unknown", r.metrics);
+    }
+    const toArr = (m: Map<string, GAdsDemoBucket>) => [...m.values()];
+    const demographics: GAdsDemographics = {
+      search: { age: toArr(demoAcc.search.age), gender: toArr(demoAcc.search.gender) },
+      youtube: { age: toArr(demoAcc.youtube.age), gender: toArr(demoAcc.youtube.gender) },
+    };
+
+    const body: GAdsResponse = { success: true, rows, searchTerms, videoRetention, youtubeCreatives, demographics, timestamp: new Date().toISOString() };
     return NextResponse.json(body, {
       headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
     });

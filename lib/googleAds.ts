@@ -42,12 +42,28 @@ export interface GAdsCreative {
   views: number;
 }
 
+// Demographic bucket (age range or gender) with delivery metrics.
+export interface GAdsDemoBucket {
+  key: string; // age: "18-24"… / gender: "female"|"male"|"unknown"
+  impressions: number;
+  clicks: number;
+}
+export interface GAdsChannelDemo {
+  age: GAdsDemoBucket[];
+  gender: GAdsDemoBucket[];
+}
+export interface GAdsDemographics {
+  search: GAdsChannelDemo;
+  youtube: GAdsChannelDemo;
+}
+
 export interface GAdsResponse {
   success: boolean;
   rows: GAdsRow[];
   searchTerms: GAdsTermRow[];
   videoRetention?: GAdsRetention | null;
   youtubeCreatives?: GAdsCreative[];
+  demographics?: GAdsDemographics;
   timestamp?: string;
   error?: string;
 }
