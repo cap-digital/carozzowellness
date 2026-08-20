@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ApiResponse, Row } from "@/lib/types";
 import { normalize, uniqueDates } from "@/lib/metrics";
-import { gaUniqueDates, type GAdsResponse, type GAdsRow, type GAdsTermRow } from "@/lib/googleAds";
+import { gaUniqueDates, type GAdsCreative, type GAdsResponse, type GAdsRetention, type GAdsRow, type GAdsTermRow } from "@/lib/googleAds";
 
 export type RangeKey = "all" | "7d" | "3d" | "1d";
 
@@ -22,6 +22,9 @@ interface Ctx {
   googleSearchRows: GAdsRow[]; // Google Search (Ads API), filtered by range
   youtubeRows: GAdsRow[]; // YouTube (Ads API), filtered by range
   searchTerms: GAdsTermRow[]; // Search terms (aggregated over the API window)
+  videoRetention: GAdsRetention | null; // YouTube quartile retention
+  youtubeCreatives: GAdsCreative[]; // YouTube video creatives
+  googleLoading: boolean; // Google Ads layer still loading (Meta already rendered)
   googleError: string | null; // Google Ads layer failed (Meta still works)
   dates: string[]; // unique sorted union across platforms (full)
   activeDates: string[]; // unique sorted (filtered)
@@ -46,6 +49,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [raw, setRaw] = useState<ApiResponse | null>(null);
   const [gads, setGads] = useState<GAdsResponse>(EMPTY_GADS);
   const [loading, setLoading] = useState(true);
+  const [googleLoading, setGoogleLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [range, setRange] = useState<RangeKey>("all");
   const [nonce, setNonce] = useState(0);
@@ -53,23 +57,29 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    Promise.all([
-      // Meta + Programática (edge). This one is required.
-      fetch("/api/meta").then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))),
-      // Google Search + YouTube (Google Ads API). Optional — degrade gracefully.
-      fetch("/api/google-ads")
-        .then((r) => r.json())
-        .catch(() => EMPTY_GADS),
-    ])
-      .then(([meta, g]: [ApiResponse, GAdsResponse]) => {
+    setGoogleLoading(true);
+
+    // Meta + Programática (edge) — required. Gates the page skeleton so the
+    // dashboard renders as soon as Meta is ready, without waiting on Google Ads.
+    fetch("/api/meta")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((meta: ApiResponse) => {
         if (!alive) return;
         if (!meta.success) throw new Error("Resposta sem sucesso");
         setRaw(meta);
-        setGads(g && Array.isArray(g.rows) ? g : EMPTY_GADS);
         setError(null);
       })
       .catch((e) => alive && setError(e.message))
       .finally(() => alive && setLoading(false));
+
+    // Google Search + YouTube (Google Ads API) — loads in the background and
+    // fills in when ready. Degrades gracefully on failure.
+    fetch("/api/google-ads")
+      .then((r) => r.json())
+      .then((g: GAdsResponse) => alive && setGads(g && Array.isArray(g.rows) ? g : EMPTY_GADS))
+      .catch(() => alive && setGads(EMPTY_GADS))
+      .finally(() => alive && setGoogleLoading(false));
+
     return () => {
       alive = false;
     };
@@ -114,6 +124,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     googleSearchRows,
     youtubeRows,
     searchTerms: gads.searchTerms ?? [],
+    videoRetention: gads.videoRetention ?? null,
+    youtubeCreatives: gads.youtubeCreatives ?? [],
+    googleLoading,
     googleError: gads.success ? null : gads.error ?? null,
     dates,
     activeDates,

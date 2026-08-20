@@ -15,6 +15,7 @@ import { useData } from "@/components/providers/DataProvider";
 import { Loadable, Reveal } from "@/components/ui/Loadable";
 import { ChartCard, SectionTitle, Card } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/Segmented";
+import { PlatformFilter } from "@/components/ui/PlatformFilter";
 import { Donut } from "@/components/charts/Donut";
 import { Heatmap } from "@/components/charts/Heatmap";
 import { Pyramid } from "@/components/charts/Pyramid";
@@ -99,6 +100,12 @@ function Publico() {
 
   return (
     <div className="space-y-6">
+      {/* Platform filter — audience (age/gender) data exists only for Meta */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="text-[11.5px] text-[var(--text-muted)]">Dados demográficos disponíveis apenas no Meta (Search/YouTube não têm público na base)</span>
+        <PlatformFilter options={[{ key: "meta", label: "Meta Ads" }]} value="meta" onChange={() => {}} />
+      </div>
+
       {/* Summary */}
       <Reveal>
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

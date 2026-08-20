@@ -22,6 +22,8 @@ import { Loadable, Reveal } from "@/components/ui/Loadable";
 import { ChartCard, SectionTitle, Card } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/Segmented";
 import { Badge } from "@/components/ui/Badge";
+import { PlatformFilter, type FilterKey } from "@/components/ui/PlatformFilter";
+import type { GAdsCreative } from "@/lib/googleAds";
 import { makeTooltip, TipShell } from "@/components/charts/ChartTooltip";
 import { sum } from "@/lib/metrics";
 import { adBreakdown, formatBreakdown } from "@/lib/aggregate";
@@ -48,12 +50,22 @@ export default function CriativosPage() {
 type SortKey = "spend" | "ctr" | "impressions" | "conv";
 
 function Criativos() {
-  const { rows } = useData();
+  const { rows, youtubeCreatives } = useData();
   const [sortKey, setSortKey] = useState<SortKey>("spend");
+  const [platform, setPlatform] = useState<FilterKey>("all");
 
   const t = useMemo(() => sum(rows), [rows]);
   const creatives = useMemo(() => adBreakdown(rows), [rows]);
   const formats = useMemo(() => formatBreakdown(rows), [rows]);
+
+  // Only platforms with creative data. Google Search has none; YouTube has video ads.
+  const filterOptions = [
+    { key: "all" as FilterKey, label: "Todas" },
+    { key: "meta" as FilterKey, label: "Meta Ads" },
+    ...(youtubeCreatives.length ? [{ key: "youtube" as FilterKey, label: "YouTube" }] : []),
+  ];
+  const showMeta = platform !== "youtube";
+  const showYoutube = platform !== "meta" && youtubeCreatives.length > 0;
 
   // Video retention curve (share of video-views retained at each depth)
   const retention = useMemo(() => {
@@ -118,6 +130,14 @@ function Criativos() {
 
   return (
     <div className="space-y-6">
+      {/* Platform filter */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-[13px] font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">Criativos por plataforma</h2>
+        <PlatformFilter options={filterOptions} value={platform} onChange={setPlatform} />
+      </div>
+
+      {showMeta && (
+      <>
       {/* Summary ribbon */}
       <Reveal>
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -258,56 +278,120 @@ function Criativos() {
         </ChartCard>
       </Reveal>
 
+      </>
+      )}
+
       {/* Gallery */}
       <Reveal delay={160}>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <SectionTitle>Galeria de criativos</SectionTitle>
-        </div>
-        <div className="mb-4 flex items-center gap-2 text-[12px] text-[var(--text-secondary)]">
-          <span>Ordenar por</span>
-          <Segmented
-            size="sm"
-            value={sortKey}
-            onChange={(v) => setSortKey(v as SortKey)}
-            options={[
-              { value: "spend", label: "Investimento" },
-              { value: "ctr", label: "CTR" },
-              { value: "impressions", label: "Impressões" },
-              { value: "conv", label: "Resultado" },
-            ]}
-          />
-        </div>
-        {sortKey === "conv" ? (
-          <div className="space-y-7">
-            {groups.map((g) => (
-              <div key={g.objective}>
-                <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-[var(--border)] pb-2">
-                  <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: g.color }} />
-                  <h3 className="text-[14px] font-semibold text-[var(--text-primary)]">{g.objective}</h3>
-                  <span className="text-[12px] text-[var(--text-muted)]">
-                    resultado medido por {g.primary?.label ?? "—"} · {g.items.length} criativo{g.items.length > 1 ? "s" : ""}
-                  </span>
-                  <span className="ml-auto text-[13px] font-semibold tnum" style={{ color: g.color }}>
-                    {resultNum(g.totalResult)} {g.primary?.short ?? ""}
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {g.items.map((c, i) => (
-                    <CreativeCard key={c.ad} c={c} index={i} />
-                  ))}
-                </div>
+        <SectionTitle>Galeria de criativos</SectionTitle>
+
+        {showMeta && (
+          <>
+            <div className="mb-4 flex items-center gap-2 text-[12px] text-[var(--text-secondary)]">
+              <span>Ordenar por</span>
+              <Segmented
+                size="sm"
+                value={sortKey}
+                onChange={(v) => setSortKey(v as SortKey)}
+                options={[
+                  { value: "spend", label: "Investimento" },
+                  { value: "ctr", label: "CTR" },
+                  { value: "impressions", label: "Impressões" },
+                  { value: "conv", label: "Resultado" },
+                ]}
+              />
+            </div>
+            {sortKey === "conv" ? (
+              <div className="space-y-7">
+                {groups.map((g) => (
+                  <div key={g.objective}>
+                    <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-[var(--border)] pb-2">
+                      <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: g.color }} />
+                      <h3 className="text-[14px] font-semibold text-[var(--text-primary)]">{g.objective}</h3>
+                      <span className="text-[12px] text-[var(--text-muted)]">
+                        resultado medido por {g.primary?.label ?? "—"} · {g.items.length} criativo{g.items.length > 1 ? "s" : ""}
+                      </span>
+                      <span className="ml-auto text-[13px] font-semibold tnum" style={{ color: g.color }}>
+                        {resultNum(g.totalResult)} {g.primary?.short ?? ""}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                      {g.items.map((c, i) => (
+                        <CreativeCard key={c.ad} c={c} index={i} />
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {sorted.map((c, i) => (
-              <CreativeCard key={c.ad} c={c} index={i} />
-            ))}
+            ) : (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {sorted.map((c, i) => (
+                  <CreativeCard key={c.ad} c={c} index={i} />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {showYoutube && (
+          <div className={showMeta ? "mt-7" : ""}>
+            <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-[var(--border)] pb-2">
+              <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: "#cf3a5f" }} />
+              <h3 className="text-[14px] font-semibold text-[var(--text-primary)]">YouTube</h3>
+              <span className="text-[12px] text-[var(--text-muted)]">
+                anúncios de vídeo · {youtubeCreatives.length} criativo{youtubeCreatives.length > 1 ? "s" : ""}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {youtubeCreatives.map((c, i) => (
+                <YoutubeCard key={c.videoId || c.ad} c={c} index={i} />
+              ))}
+            </div>
           </div>
         )}
       </Reveal>
     </div>
+  );
+}
+
+function YoutubeCard({ c, index }: { c: GAdsCreative; index: number }) {
+  const vtr = c.impressions > 0 ? (c.views / c.impressions) * 100 : 0;
+  const cpv = c.views > 0 ? c.spend / c.views : 0;
+  return (
+    <Card className="group overflow-hidden">
+      <div className="relative">
+        <CreativeThumb thumb={c.thumb} format="Vídeo" color="#cf3a5f" className="h-36 w-full" iconSize={20} alt={c.ad} href={c.permalink || undefined} />
+        <span className="absolute left-3 top-3">
+          <Badge color="#cf3a5f">YouTube</Badge>
+        </span>
+        <span className="absolute right-3 top-3 rounded-full bg-[var(--surface-1)]/85 px-1.5 py-0.5 text-[10px] font-semibold text-[var(--text-muted)] backdrop-blur-sm">
+          #{index + 1}
+        </span>
+      </div>
+      <div className="p-3.5">
+        <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]" title={c.ad}>
+          {c.ad}
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-[12px]">
+          <Metric label="Investido" value={brl(c.spend, 0)} />
+          <Metric label="Views" value={compact(c.views)} accent="#cf3a5f" />
+          <Metric label="Impressões" value={compact(c.impressions)} />
+          <Metric label="VTR" value={pct(vtr)} />
+          <Metric label="CPV" value={brl(cpv, 3)} />
+          <Metric label="Cliques" value={int(c.clicks)} />
+        </div>
+        {c.permalink && (
+          <a
+            href={c.permalink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+          >
+            <ExternalLink size={13} /> Ver no YouTube
+          </a>
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -319,7 +403,8 @@ function CreativeCard({ c, index }: { c: Creative; index: number }) {
     <Card className="group overflow-hidden">
       <div className="relative">
         <CreativeThumb thumb={c.thumb} format={c.format} color={color} className="h-36 w-full" iconSize={20} alt={c.ad} href={c.permalink || undefined} />
-        <span className="absolute left-3 top-3">
+        <span className="absolute left-3 top-3 flex items-center gap-1.5">
+          <Badge color="#2f80c4">Meta</Badge>
           <Badge color={color}>{c.format}</Badge>
         </span>
         <span className="absolute right-3 top-3 rounded-full bg-[var(--surface-1)]/85 px-1.5 py-0.5 text-[10px] font-semibold text-[var(--text-muted)] backdrop-blur-sm">

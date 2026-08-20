@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { OAuth2Client } from "google-auth-library";
-import type { GAdsChannel, GAdsResponse, GAdsRow, GAdsTermRow } from "@/lib/googleAds";
+import type { GAdsChannel, GAdsCreative, GAdsResponse, GAdsRetention, GAdsRow, GAdsTermRow } from "@/lib/googleAds";
 
 // Server-side Google Ads API integration (v25) for Carozzo Wellness.
 // Channels: Search ([ID3] [SEARCH] …) and YouTube ([ID3] [YOUTUBE] …, Video).
@@ -88,14 +88,37 @@ export async function GET() {
     const token = await accessToken();
     const range = dateRange();
 
-    const campaignRows = await gaqlSearch(
-      token,
-      `SELECT campaign.name, campaign.advertising_channel_type, segments.date,
-              metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions,
-              metrics.video_trueview_views
-       FROM campaign
-       WHERE ${CAMPAIGN_FILTER} AND ${range}`
-    );
+    // The four queries are independent — run them in parallel to cut latency.
+    const [campaignRows, termRows, retRows, adRows] = await Promise.all([
+      gaqlSearch(
+        token,
+        `SELECT campaign.name, campaign.advertising_channel_type, segments.date,
+                metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions,
+                metrics.video_trueview_views
+         FROM campaign
+         WHERE ${CAMPAIGN_FILTER} AND ${range}`
+      ),
+      gaqlSearch(
+        token,
+        `SELECT search_term_view.search_term, metrics.impressions, metrics.clicks, metrics.cost_micros
+         FROM search_term_view
+         WHERE ${CAMPAIGN_FILTER} AND ${range}`
+      ),
+      gaqlSearch(
+        token,
+        `SELECT metrics.video_quartile_p25_rate, metrics.video_quartile_p50_rate,
+                metrics.video_quartile_p75_rate, metrics.video_quartile_p100_rate
+         FROM campaign
+         WHERE ${CAMPAIGN_FILTER} AND campaign.advertising_channel_type = 'VIDEO' AND ${range}`
+      ),
+      gaqlSearch(
+        token,
+        `SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.video_responsive_ad.videos,
+                metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.video_trueview_views
+         FROM ad_group_ad
+         WHERE ${CAMPAIGN_FILTER} AND campaign.advertising_channel_type = 'VIDEO' AND ${range}`
+      ),
+    ]);
 
     const rows: GAdsRow[] = [];
     for (const r of campaignRows) {
@@ -115,12 +138,6 @@ export async function GET() {
     }
 
     // Search terms (Search campaign only). Aggregate by term, keep the top by impressions.
-    const termRows = await gaqlSearch(
-      token,
-      `SELECT search_term_view.search_term, metrics.impressions, metrics.clicks, metrics.cost_micros
-       FROM search_term_view
-       WHERE ${CAMPAIGN_FILTER} AND ${range}`
-    );
     const termMap = new Map<string, GAdsTermRow>();
     for (const r of termRows) {
       const term = r.searchTermView?.searchTerm;
@@ -137,7 +154,52 @@ export async function GET() {
       .sort((a, b) => b.impressions - a.impressions)
       .slice(0, 500);
 
-    const body: GAdsResponse = { success: true, rows, searchTerms, timestamp: new Date().toISOString() };
+    // YouTube video retention (quartile completion rates, aggregated over the window).
+    const rmet = retRows[0]?.metrics;
+    const videoRetention: GAdsRetention | null = rmet
+      ? {
+          p25: +(num(rmet.videoQuartileP25Rate) * 100).toFixed(1),
+          p50: +(num(rmet.videoQuartileP50Rate) * 100).toFixed(1),
+          p75: +(num(rmet.videoQuartileP75Rate) * 100).toFixed(1),
+          p100: +(num(rmet.videoQuartileP100Rate) * 100).toFixed(1),
+        }
+      : null;
+
+    // YouTube video creatives (ad-level) + resolve the YouTube video id for thumbnails.
+    const assetRes = new Set<string>();
+    for (const r of adRows)
+      for (const v of r.adGroupAd?.ad?.videoResponsiveAd?.videos ?? []) if (v.asset) assetRes.add(v.asset);
+    const assetMap = new Map<string, { youtubeVideoId?: string; youtubeVideoTitle?: string }>();
+    if (assetRes.size) {
+      const ids = [...assetRes].map((rn) => rn.split("/").pop()).filter(Boolean);
+      const assetRows = await gaqlSearch(
+        token,
+        `SELECT asset.resource_name, asset.youtube_video_asset.youtube_video_id,
+                asset.youtube_video_asset.youtube_video_title
+         FROM asset WHERE asset.id IN (${ids.join(",")})`
+      );
+      for (const a of assetRows) if (a.asset?.resourceName) assetMap.set(a.asset.resourceName, a.asset.youtubeVideoAsset ?? {});
+    }
+    const youtubeCreatives: GAdsCreative[] = adRows
+      .map((r) => {
+        const ad = r.adGroupAd?.ad ?? {};
+        const m = r.metrics ?? {};
+        const vid = (ad.videoResponsiveAd?.videos ?? []).map((v: any) => assetMap.get(v.asset)).find(Boolean);
+        const videoId = vid?.youtubeVideoId ?? "";
+        return {
+          ad: vid?.youtubeVideoTitle || ad.name || "Vídeo",
+          videoId,
+          thumb: videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : "",
+          permalink: videoId ? `https://www.youtube.com/watch?v=${videoId}` : "",
+          spend: +(num(m.costMicros) / 1e6).toFixed(2),
+          clicks: num(m.clicks),
+          impressions: num(m.impressions),
+          views: num(m.videoTrueviewViews),
+        };
+      })
+      .sort((a, b) => b.spend - a.spend);
+
+    const body: GAdsResponse = { success: true, rows, searchTerms, videoRetention, youtubeCreatives, timestamp: new Date().toISOString() };
     return NextResponse.json(body, {
       headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
     });

@@ -3,6 +3,8 @@
 import { useMemo } from "react";
 import {
   ComposedChart,
+  AreaChart,
+  Area,
   Bar,
   Line,
   XAxis,
@@ -15,8 +17,11 @@ import { useData } from "@/components/providers/DataProvider";
 import { Loadable, Reveal } from "@/components/ui/Loadable";
 import { ChartCard, SectionTitle, Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PageSkeleton } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/Badge";
-import { TipShell } from "@/components/charts/ChartTooltip";
+import { Funnel } from "@/components/charts/Funnel";
+import { Donut } from "@/components/charts/Donut";
+import { makeTooltip, TipShell } from "@/components/charts/ChartTooltip";
 import { gaSum, gaDerive, gaDaily } from "@/lib/googleAds";
 import { brl, int, pct, compact, shortDate } from "@/lib/format";
 import { CHART } from "@/lib/theme";
@@ -24,6 +29,7 @@ import { MonitorPlay, Clock } from "lucide-react";
 
 const WINE = "#cf3a5f";
 const TEAL = "#14a58c";
+const GOLD = "#e0a010";
 
 export default function YoutubePage() {
   return (
@@ -34,12 +40,13 @@ export default function YoutubePage() {
 }
 
 function Youtube() {
-  const { youtubeRows: rows } = useData();
+  const { youtubeRows: rows, videoRetention, googleLoading } = useData();
 
   const t = useMemo(() => gaSum(rows), [rows]);
   const d = useMemo(() => gaDerive(t), [t]);
   const daily = useMemo(() => gaDaily(rows), [rows]);
 
+  if (rows.length === 0 && googleLoading) return <PageSkeleton />;
   if (rows.length === 0) {
     return (
       <EmptyState
@@ -50,6 +57,27 @@ function Youtube() {
       />
     );
   }
+
+  const funnelStages = [
+    { label: "Impressões", value: t.impressions, color: WINE },
+    { label: "Views (TrueView)", value: t.views, color: TEAL },
+    { label: "Cliques", value: t.clicks, color: GOLD },
+  ];
+
+  const retention = videoRetention
+    ? [
+        { depth: "Início", value: 100 },
+        { depth: "25%", value: videoRetention.p25 },
+        { depth: "50%", value: videoRetention.p50 },
+        { depth: "75%", value: videoRetention.p75 },
+        { depth: "100%", value: videoRetention.p100 },
+      ]
+    : [];
+
+  const vtrDonut = [
+    { name: "Assistiram (view)", value: t.views, color: TEAL },
+    { name: "Sem view", value: Math.max(t.impressions - t.views, 0), color: "#e6e3d6" },
+  ];
 
   const dailyTip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
@@ -84,9 +112,7 @@ function Youtube() {
                     Conectado
                   </Badge>
                 </div>
-                <p className="text-[12.5px] text-[var(--text-secondary)]">
-                  Vídeo · Google Ads · {int(t.rows)} registros
-                </p>
+                <p className="text-[12.5px] text-[var(--text-secondary)]">Vídeo · Google Ads · {int(t.rows)} registros</p>
               </div>
             </div>
             <div className="grid flex-1 grid-cols-2 gap-x-4 gap-y-3 border-t border-[var(--border)] pt-4 sm:grid-cols-3 md:border-l md:border-t-0 md:pl-6 md:pt-0 lg:grid-cols-6">
@@ -108,49 +134,81 @@ function Youtube() {
         </Card>
       </Reveal>
 
-      {/* Daily delivery */}
+      {/* Video funnel + retention */}
       <Reveal delay={60}>
-        <SectionTitle hint="impressões e views ao longo do período">Entrega diária</SectionTitle>
-        <ChartCard title="Impressões e views por dia" subtitle="Barras: impressões · Linha: views (TrueView)" accent={WINE}>
-          <div style={{ height: 288 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={daily} margin={{ top: 10, right: 8, left: 4, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke={CHART.grid} />
-                <XAxis dataKey="date" tickFormatter={shortDate} tick={{ fontSize: 11, fill: CHART.textMuted }} tickLine={false} axisLine={{ stroke: CHART.axis }} />
-                <YAxis yAxisId="left" tickFormatter={compact} tick={{ fontSize: 11, fill: WINE }} tickLine={false} axisLine={false} width={44} />
-                <YAxis yAxisId="right" orientation="right" tickFormatter={compact} tick={{ fontSize: 11, fill: TEAL }} tickLine={false} axisLine={false} width={44} />
-                <Tooltip content={dailyTip} cursor={{ fill: "rgba(70,89,7,0.06)" }} />
-                <Bar yAxisId="left" isAnimationActive={false} dataKey="impressions" fill={WINE} radius={[4, 4, 0, 0]} maxBarSize={34} />
-                <Line yAxisId="right" isAnimationActive={false} type="monotone" dataKey="views" stroke={TEAL} strokeWidth={2.5} dot={false} activeDot={{ r: 4, fill: TEAL, stroke: "var(--surface-1)", strokeWidth: 2 }} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="mt-1 flex items-center gap-4 px-1 text-[11.5px] text-[var(--text-secondary)]">
-            <span className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: WINE }} /> Impressões
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-[3px] w-3.5 rounded-full" style={{ background: TEAL }} /> Views
-            </span>
-          </div>
-        </ChartCard>
+        <SectionTitle hint="do impacto à retenção da audiência">Desempenho de vídeo</SectionTitle>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <ChartCard title="Funil de vídeo" subtitle="Da impressão à view e ao clique" accent={WINE}>
+            <div className="pt-1">
+              <Funnel stages={funnelStages} />
+            </div>
+          </ChartCard>
+
+          <ChartCard title="Curva de retenção" subtitle="% das reproduções que chega a cada ponto do vídeo" accent={TEAL}>
+            {retention.length ? (
+              <div style={{ height: 232 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={retention} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="ytRet" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={TEAL} stopOpacity={0.28} />
+                        <stop offset="100%" stopColor={TEAL} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid vertical={false} stroke={CHART.grid} />
+                    <XAxis dataKey="depth" tick={{ fontSize: 11, fill: CHART.textMuted }} tickLine={false} axisLine={{ stroke: CHART.axis }} />
+                    <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11, fill: CHART.textMuted }} tickLine={false} axisLine={false} width={38} domain={[0, 100]} />
+                    <Tooltip content={makeTooltip((_n, v) => ({ label: "Retenção", value: pct(v, 1), color: TEAL }))} />
+                    <Area isAnimationActive={false} type="monotone" dataKey="value" stroke={TEAL} strokeWidth={2.5} fill="url(#ytRet)" dot={{ r: 3, fill: TEAL, stroke: "var(--surface-1)", strokeWidth: 2 }} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="flex h-[232px] items-center justify-center text-[12.5px] text-[var(--text-muted)]">Sem dados de retenção no período</div>
+            )}
+          </ChartCard>
+        </div>
       </Reveal>
 
-      {/* Daily investment */}
+      {/* Daily delivery + VTR donut */}
       <Reveal delay={120}>
-        <ChartCard title="Investimento por dia" subtitle="Gasto diário em vídeo (R$)" accent="#465907">
-          <div style={{ height: 220 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={daily} margin={{ top: 10, right: 8, left: 4, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke={CHART.grid} />
-                <XAxis dataKey="date" tickFormatter={shortDate} tick={{ fontSize: 11, fill: CHART.textMuted }} tickLine={false} axisLine={{ stroke: CHART.axis }} />
-                <YAxis tickFormatter={(v) => brl(v, 0)} tick={{ fontSize: 11, fill: CHART.textMuted }} tickLine={false} axisLine={false} width={54} />
-                <Tooltip cursor={{ fill: "rgba(70,89,7,0.06)" }} content={({ active, payload, label }: any) => (active && payload?.length ? <TipShell title={shortDate(String(label))} rows={[{ label: "Investido", value: brl(payload[0].value), color: "#465907" }]} /> : null)} />
-                <Bar isAnimationActive={false} dataKey="spend" fill="#7c9440" radius={[4, 4, 0, 0]} maxBarSize={30} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-        </ChartCard>
+        <SectionTitle hint="entrega diária e taxa de visualização">Entrega</SectionTitle>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <ChartCard className="lg:col-span-2" title="Impressões e views por dia" subtitle="Barras: impressões · Linha: views (TrueView)" accent={WINE}>
+            <div style={{ height: 260 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={daily} margin={{ top: 10, right: 8, left: 4, bottom: 0 }}>
+                  <CartesianGrid vertical={false} stroke={CHART.grid} />
+                  <XAxis dataKey="date" tickFormatter={shortDate} tick={{ fontSize: 11, fill: CHART.textMuted }} tickLine={false} axisLine={{ stroke: CHART.axis }} />
+                  <YAxis yAxisId="left" tickFormatter={compact} tick={{ fontSize: 11, fill: WINE }} tickLine={false} axisLine={false} width={44} />
+                  <YAxis yAxisId="right" orientation="right" tickFormatter={compact} tick={{ fontSize: 11, fill: TEAL }} tickLine={false} axisLine={false} width={44} />
+                  <Tooltip content={dailyTip} cursor={{ fill: "rgba(70,89,7,0.06)" }} />
+                  <Bar yAxisId="left" isAnimationActive={false} dataKey="impressions" fill={WINE} radius={[4, 4, 0, 0]} maxBarSize={30} />
+                  <Line yAxisId="right" isAnimationActive={false} type="monotone" dataKey="views" stroke={TEAL} strokeWidth={2.5} dot={false} activeDot={{ r: 4, fill: TEAL, stroke: "var(--surface-1)", strokeWidth: 2 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="mt-1 flex items-center gap-4 px-1 text-[11.5px] text-[var(--text-secondary)]">
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: WINE }} /> Impressões
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-[3px] w-3.5 rounded-full" style={{ background: TEAL }} /> Views
+              </span>
+            </div>
+          </ChartCard>
+
+          <ChartCard title="Taxa de visualização (VTR)" subtitle="Parte das impressões que virou view" accent={TEAL}>
+            <Donut
+              data={vtrDonut}
+              centerValue={pct(d.vtr)}
+              centerLabel="VTR"
+              format={(v) => int(v)}
+              legendBelow
+              height={190}
+            />
+          </ChartCard>
+        </div>
       </Reveal>
     </div>
   );

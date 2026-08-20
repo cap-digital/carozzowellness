@@ -34,7 +34,7 @@ export const NAV: NavSection[] = [
     items: [
       { href: "/plataformas/meta", label: "Meta Ads", icon: Megaphone, color: "#2f80c4", status: "live" },
       { href: "/plataformas/google", label: "Google Pesquisa", icon: Search, color: "#e0a010", status: "live" },
-      { href: "/plataformas/youtube", label: "YouTube", icon: MonitorPlay, color: "#cf3a5f", status: "soon" },
+      { href: "/plataformas/youtube", label: "YouTube", icon: MonitorPlay, color: "#cf3a5f", status: "live" },
       { href: "/plataformas/programatica", label: "Programática", icon: RadioTower, color: "#8a63d4", status: "soon" },
     ],
   },

@@ -23,6 +23,7 @@ import { makeTooltip, TipShell } from "@/components/charts/ChartTooltip";
 import { sum, derive, byDate } from "@/lib/metrics";
 import { objectiveBreakdown, conversionStats } from "@/lib/aggregate";
 import { gaSum, gaDerive } from "@/lib/googleAds";
+import { PlatformFilter, type FilterKey } from "@/components/ui/PlatformFilter";
 import { brl, int, pct, dec, compactBRL, shortDate } from "@/lib/format";
 import { CHART } from "@/lib/theme";
 
@@ -74,6 +75,7 @@ function Custos() {
   // Cost sections per non-Meta platform (only rendered when they have data).
   const adsSections = [
     gT.rows > 0 && {
+      platform: "google" as FilterKey,
       label: "Google Rede de Pesquisa", color: "#e0a010",
       tiles: [
         { l: "Investido", v: brl(gT.spend, 0), hint: "total na Rede de Pesquisa" },
@@ -84,6 +86,7 @@ function Custos() {
       ],
     },
     yt.rows > 0 && {
+      platform: "youtube" as FilterKey,
       label: "YouTube", color: "#cf3a5f",
       tiles: [
         { l: "Investido", v: brl(yt.spend, 0), hint: "total em vídeo" },
@@ -93,7 +96,19 @@ function Custos() {
         { l: "Views", v: int(yt.views), hint: `de ${int(yt.impressions)} impressões` },
       ],
     },
-  ].filter(Boolean) as { label: string; color: string; tiles: { l: string; v: string; hint: string }[] }[];
+  ].filter(Boolean) as { platform: FilterKey; label: string; color: string; tiles: { l: string; v: string; hint: string }[] }[];
+
+  // Platform filter (only channels with data). Filters sections/rows below.
+  const [platform, setPlatform] = useState<FilterKey>("all");
+  const platformOptions = [
+    { key: "all" as FilterKey, label: "Todas" },
+    { key: "meta" as FilterKey, label: "Meta Ads" },
+    ...(gT.rows > 0 ? [{ key: "google" as FilterKey, label: "Google" }] : []),
+    ...(yt.rows > 0 ? [{ key: "youtube" as FilterKey, label: "YouTube" }] : []),
+  ];
+  const showMeta = platform === "all" || platform === "meta";
+  const rowPlatform = (key: string): FilterKey => (key === "Google Pesquisa" ? "google" : key === "YouTube" ? "youtube" : "meta");
+  const byPlatform = (key: string) => platform === "all" || rowPlatform(key) === platform;
   // Cost per conversion action, each from its OWN campaign strategy's spend.
   const cs = useMemo(() => {
     const m = new Map(conversionStats(rows).map((s) => [s.key, s]));
@@ -226,7 +241,14 @@ function Custos() {
 
   return (
     <div className="space-y-6">
-      {/* Metric tiles */}
+      {/* Platform filter */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-[13px] font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">Custos por plataforma</h2>
+        <PlatformFilter options={platformOptions} value={platform} onChange={setPlatform} />
+      </div>
+
+      {/* Metric tiles (Meta) */}
+      {showMeta && (
       <Reveal>
         <SectionTitle hint="Meta Ads · indicadores de custo e eficiência do período">Custos e taxas</SectionTitle>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -250,9 +272,10 @@ function Custos() {
           ))}
         </Card>
       </Reveal>
+      )}
 
       {/* Google Ads costs (Search + YouTube) */}
-      {adsSections.map((sec, i) => (
+      {adsSections.filter((sec) => platform === "all" || platform === sec.platform).map((sec, i) => (
         <Reveal key={sec.label} delay={40 + i * 30}>
           <SectionTitle hint="Google Ads · custo e eficiência do canal">Custos — {sec.label}</SectionTitle>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -271,10 +294,11 @@ function Custos() {
       {/* Trend + per-objective */}
       <Reveal delay={60}>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {showMeta && (
           <ChartCard
             className="lg:col-span-2"
             title="Evolução das taxas no período"
-            subtitle="Acompanhe a métrica escolhida dia a dia"
+            subtitle="Meta Ads · acompanhe a métrica escolhida dia a dia"
             accent={tm.color}
             right={
               <Dropdown
@@ -305,8 +329,10 @@ function Custos() {
               </ResponsiveContainer>
             </div>
           </ChartCard>
+          )}
 
           <ChartCard
+            className={showMeta ? undefined : "lg:col-span-3"}
             title="Custo por campanha"
             subtitle={`Comparativo de ${om.label}`}
             accent="#b08a3e"
@@ -322,13 +348,13 @@ function Custos() {
           >
             <div style={{ height: 258 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart layout="vertical" data={objBars} margin={{ top: 4, right: 58, left: 4, bottom: 0 }}>
+                <BarChart layout="vertical" data={objBars.filter((b) => byPlatform(b.name))} margin={{ top: 4, right: 58, left: 4, bottom: 0 }}>
                   <CartesianGrid horizontal={false} stroke={CHART.grid} />
                   <XAxis type="number" tickFormatter={axisKind(om.kind)} tick={{ fontSize: 11, fill: CHART.textMuted }} tickLine={false} axisLine={{ stroke: CHART.axis }} />
                   <YAxis type="category" dataKey="name" tick={{ fontSize: 10.5, fill: CHART.textSecondary }} tickLine={false} axisLine={false} width={96} />
                   <Tooltip cursor={{ fill: "rgba(70,89,7,0.06)" }} content={makeTooltip((_n, v, p) => ({ label: om.label, value: fmtKind(om.kind, v), color: (p as any).color }))} />
                   <Bar isAnimationActive={false} dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={24}>
-                    {objBars.map((b) => (
+                    {objBars.filter((b) => byPlatform(b.name)).map((b) => (
                       <Cell key={b.name} fill={b.color} />
                     ))}
                     <LabelList dataKey="value" position="right" formatter={(v: any) => fmtKind(om.kind, v)} style={{ fontSize: 10.5, fill: CHART.textSecondary, fontWeight: 600 }} />
@@ -342,9 +368,9 @@ function Custos() {
 
       {/* Full table */}
       <Reveal delay={120}>
-        <SectionTitle hint="Meta e Google · ordene por qualquer coluna">Detalhamento de custos por campanha</SectionTitle>
+        <SectionTitle hint="todas as plataformas · ordene por qualquer coluna">Detalhamento de custos por campanha</SectionTitle>
         <Card className="p-1.5">
-          <DataTable columns={cols} data={costRows} rowKey={(r) => r.key} initialSort={{ key: "spend", dir: "desc" }} />
+          <DataTable columns={cols} data={costRows.filter((r) => byPlatform(r.key))} rowKey={(r) => r.key} initialSort={{ key: "spend", dir: "desc" }} />
         </Card>
       </Reveal>
     </div>

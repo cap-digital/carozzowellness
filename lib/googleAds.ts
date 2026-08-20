@@ -22,10 +22,32 @@ export interface GAdsTermRow {
   impressions: number;
 }
 
+// YouTube video retention (quartile completion rates, %).
+export interface GAdsRetention {
+  p25: number;
+  p50: number;
+  p75: number;
+  p100: number;
+}
+
+// A YouTube video creative (for the Criativos gallery).
+export interface GAdsCreative {
+  ad: string; // video title (falls back to ad name)
+  videoId: string;
+  thumb: string; // i.ytimg.com thumbnail URL ("" if unknown)
+  permalink: string; // youtube.com watch URL ("" if unknown)
+  spend: number;
+  clicks: number;
+  impressions: number;
+  views: number;
+}
+
 export interface GAdsResponse {
   success: boolean;
   rows: GAdsRow[];
   searchTerms: GAdsTermRow[];
+  videoRetention?: GAdsRetention | null;
+  youtubeCreatives?: GAdsCreative[];
   timestamp?: string;
   error?: string;
 }

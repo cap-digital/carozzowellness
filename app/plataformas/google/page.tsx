@@ -18,6 +18,7 @@ import { Loadable, Reveal } from "@/components/ui/Loadable";
 import { ChartCard, SectionTitle, Card } from "@/components/ui/Card";
 import { DataTable, Column } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PageSkeleton } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/Badge";
 import { makeTooltip, TipShell } from "@/components/charts/ChartTooltip";
 import { gaSum, gaDerive, gaDaily, gaTerms } from "@/lib/googleAds";
@@ -37,7 +38,7 @@ export default function GooglePage() {
 }
 
 function Google() {
-  const { googleSearchRows: rows, searchTerms } = useData();
+  const { googleSearchRows: rows, searchTerms, googleLoading } = useData();
 
   const t = useMemo(() => gaSum(rows), [rows]);
   const d = useMemo(() => gaDerive(t), [t]);
@@ -50,6 +51,7 @@ function Google() {
   );
   const tableTerms = useMemo(() => terms.slice(0, 40), [terms]);
 
+  if (rows.length === 0 && googleLoading) return <PageSkeleton />;
   if (rows.length === 0) {
     return (
       <EmptyState

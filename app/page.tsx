@@ -224,11 +224,18 @@ function Overview() {
                   <div className="mt-3 pl-2 text-[11.5px] text-[var(--text-muted)]">Sem dados no período</div>
                 ) : (
                   <div className="mt-3 grid grid-cols-3 gap-2 pl-2">
-                    {[
-                      { l: "Impressões", v: compact(p.impressions) },
-                      { l: "Cliques", v: int(p.clicks) },
-                      { l: "CTR", v: pct(p.ctr) },
-                    ].map((s) => (
+                    {(p.key === "youtube"
+                      ? [
+                          { l: "Views", v: compact(p.views) },
+                          { l: "CPV", v: brl(p.cpv, 3) },
+                          { l: "VTR", v: pct(p.vtr) },
+                        ]
+                      : [
+                          { l: "Impressões", v: compact(p.impressions) },
+                          { l: "Cliques", v: int(p.clicks) },
+                          { l: "CTR", v: pct(p.ctr) },
+                        ]
+                    ).map((s) => (
                       <div key={s.l}>
                         <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">{s.l}</div>
                         <div className="mt-0.5 text-[14px] font-semibold tnum text-[var(--text-primary)]">{s.v}</div>

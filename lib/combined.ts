@@ -17,6 +17,9 @@ export interface PlatformAgg {
   ctr: number;
   cpc: number;
   cpm: number;
+  views: number; // YouTube TrueView views (0 for others)
+  vtr: number; // YouTube view rate (0 for others)
+  cpv: number; // YouTube cost per view (0 for others)
 }
 
 export const PLATFORM_COLOR: Record<PlatformKey, string> = {
@@ -32,10 +35,10 @@ export function platformAggs(meta: Totals, search: GAdsRow[], youtube: GAdsRow[]
   const s = gaSum(search), sd = gaDerive(s);
   const y = gaSum(youtube), yd = gaDerive(y);
   return [
-    { key: "meta", label: "Meta Ads", color: PLATFORM_COLOR.meta, spend: meta.spend, impressions: meta.impressions, clicks: meta.linkClicks, ctr: md.ctrLink, cpc: md.cpcLink, cpm: md.cpm },
-    { key: "google", label: "Google Pesquisa", color: PLATFORM_COLOR.google, spend: s.spend, impressions: s.impressions, clicks: s.clicks, ctr: sd.ctr, cpc: sd.cpc, cpm: sd.cpm },
-    { key: "youtube", label: "YouTube", color: PLATFORM_COLOR.youtube, spend: y.spend, impressions: y.impressions, clicks: y.clicks, ctr: yd.ctr, cpc: yd.cpc, cpm: yd.cpm },
-    { key: "programatica", label: "Programática", color: PLATFORM_COLOR.programatica, spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0, cpm: 0 },
+    { key: "meta", label: "Meta Ads", color: PLATFORM_COLOR.meta, spend: meta.spend, impressions: meta.impressions, clicks: meta.linkClicks, ctr: md.ctrLink, cpc: md.cpcLink, cpm: md.cpm, views: 0, vtr: 0, cpv: 0 },
+    { key: "google", label: "Google Pesquisa", color: PLATFORM_COLOR.google, spend: s.spend, impressions: s.impressions, clicks: s.clicks, ctr: sd.ctr, cpc: sd.cpc, cpm: sd.cpm, views: 0, vtr: 0, cpv: 0 },
+    { key: "youtube", label: "YouTube", color: PLATFORM_COLOR.youtube, spend: y.spend, impressions: y.impressions, clicks: y.clicks, ctr: yd.ctr, cpc: yd.cpc, cpm: yd.cpm, views: y.views, vtr: yd.vtr, cpv: yd.cpv },
+    { key: "programatica", label: "Programática", color: PLATFORM_COLOR.programatica, spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0, cpm: 0, views: 0, vtr: 0, cpv: 0 },
   ];
 }
 
