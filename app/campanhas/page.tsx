@@ -215,10 +215,11 @@ function Campanhas() {
     <div className="space-y-6">
       {/* Summary — each conversion campaign by its métrica mãe */}
       <Reveal>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           <SummaryCard label="Investimento total" value={brl(t.spend + gT.spend + yt.spend, 0)} hint="todas as plataformas" color="#465907" />
           <SummaryCard label="WhatsApp" value={int(primaryOf("WHATSAPP"))} hint="campanha WhatsApp" color="#5a8f22" />
-          <SummaryCard label="Leads LP" value={int(primaryOf("CONVERSAO-LP"))} hint="campanha Conversão-LP" color="#e0a010" />
+          <SummaryCard label="Leads LP" value={int(primaryOf("CLIQUE BOTAO WPP"))} hint="clique botão WhatsApp" color="#e0a010" />
+          <SummaryCard label="Lead no site" value={int(primaryOf("LEAD NO SITE"))} hint="pixel lead no site" color="#8a63d4" />
           <SummaryCard label="Leads Formulário" value={int(primaryOf("LEAD-ADS"))} hint="campanha Lead-Ads" color="#cf3a5f" />
         </div>
       </Reveal>

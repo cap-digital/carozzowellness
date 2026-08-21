@@ -112,7 +112,7 @@ function Custos() {
   // Cost per conversion action, each from its OWN campaign strategy's spend.
   const cs = useMemo(() => {
     const m = new Map(conversionStats(rows).map((s) => [s.key, s]));
-    return { conversations: m.get("conversations")!, whatsapp: m.get("whatsapp")!, leadGrouped: m.get("leadGrouped")! };
+    return { conversations: m.get("conversations")!, whatsapp: m.get("whatsapp")!, leadGrouped: m.get("leadGrouped")!, leadSite: m.get("leadSite")! };
   }, [rows]);
 
   const [trendKey, setTrendKey] = useState("cpm");
@@ -170,10 +170,11 @@ function Custos() {
   // secondary metrics shown as a slim inline strip — cost per conversion action,
   // one per strategy, kept separate (never a blended "custo por conversão")
   const secondary = [
-    { l: "Frequência", v: `${dec(d.frequency, 2)}x`, color: "#8a63d4" },
+    { l: "Frequência", v: `${dec(d.frequency, 2)}x`, color: "#8f6d29" },
     { l: "Custo / WhatsApp", v: brl(cs.conversations.cost), color: "#5a8f22" },
     { l: "Custo / Lead LP", v: brl(cs.whatsapp.cost), color: "#e0a010" },
     { l: "Custo / Lead Formulário", v: brl(cs.leadGrouped.cost), color: "#cf3a5f" },
+    { l: "Custo / Lead no site", v: brl(cs.leadSite.cost), color: "#8a63d4" },
   ];
 
   // Unified cost-row table across platforms. Google Search has no video/lead/

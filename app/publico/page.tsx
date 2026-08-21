@@ -271,7 +271,7 @@ function Publico() {
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart
                           layout="vertical"
-                          data={ageStats.map((a) => ({ name: a.age, conversations: a.t.conversations, whatsapp: a.t.whatsapp, leadGrouped: a.t.leadGrouped }))}
+                          data={ageStats.map((a) => ({ name: a.age, conversations: a.t.conversations, whatsapp: a.t.whatsapp, leadGrouped: a.t.leadGrouped, leadSite: a.t.leadSite }))}
                           margin={{ top: 4, right: 24, left: 4, bottom: 0 }}
                           barCategoryGap="22%"
                         >

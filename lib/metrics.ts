@@ -73,13 +73,14 @@ export function normalize(r: MetaRow): Row {
     conversations: num(r.actions_onsite_conversion_messaging_conversation_started_7d),
     leads,
     leadGrouped: num(r.actions_onsite_conversion_lead_grouped),
+    leadSite: num(r.actions_offsite_conversion_fb_pixel_lead),
   };
 }
 
 // ---- "métrica mãe": each campaign objective has ONE primary result metric ----
 // The client measures each campaign by its objective's own KPI, never a blanket sum.
 export interface PrimaryDef {
-  field: "impressions" | "reach" | "videoViews" | "conversations" | "whatsapp" | "leadGrouped";
+  field: "impressions" | "reach" | "videoViews" | "conversations" | "whatsapp" | "leadGrouped" | "leadSite";
   label: string; // full name, e.g. "WhatsApp"
   short: string; // compact name for tight spaces
   costLabel: string; // e.g. "Custo por WhatsApp"
@@ -91,7 +92,12 @@ export const PRIMARY_BY_OBJECTIVE: Record<string, PrimaryDef> = {
   ALCANCE: { field: "impressions", label: "Impressões", short: "Impressões", costLabel: "Custo por mil (CPM)", isConversion: false },
   VIDEOVIEW: { field: "videoViews", label: "Views de vídeo", short: "Views", costLabel: "Custo por view (CPV)", isConversion: false },
   WHATSAPP: { field: "conversations", label: "WhatsApp", short: "WhatsApp", costLabel: "Custo por WhatsApp", isConversion: true },
-  "CONVERSAO-LP": { field: "whatsapp", label: "Leads LP", short: "Leads LP", costLabel: "Custo por Lead LP", isConversion: true },
+  // The old [CONVERSAO-LP] campaign was renamed to [CONVERSAO-LP] [CLIQUE BOTAO WPP]
+  // (last bracket wins in parseObjective). Métrica mãe unchanged: whatsapp-button click.
+  "CLIQUE BOTAO WPP": { field: "whatsapp", label: "Leads LP", short: "Leads LP", costLabel: "Custo por Lead LP", isConversion: true },
+  "CONVERSAO-LP": { field: "whatsapp", label: "Leads LP", short: "Leads LP", costLabel: "Custo por Lead LP", isConversion: true }, // legacy alias
+  // New campaign [CONVERSAO-LP] [LEAD NO SITE] — métrica mãe = fb_pixel_lead.
+  "LEAD NO SITE": { field: "leadSite", label: "Lead no site", short: "Lead site", costLabel: "Custo por Lead no site", isConversion: true },
   "LEAD-ADS": { field: "leadGrouped", label: "Leads Formulário", short: "Leads Form.", costLabel: "Custo por Lead Formulário", isConversion: true },
 };
 
@@ -107,7 +113,7 @@ export function primaryDef(objective: string): PrimaryDef | undefined {
 //   conversations (…conversation_started_7d)        · estratégia WHATSAPP     → "WhatsApp"
 //   whatsapp      (…custom_clique_botao_whatsapp)    · estratégia CONVERSAO-LP → "Leads LP"
 //   leadGrouped   (…onsite_conversion_lead_grouped)  · estratégia LEAD-ADS     → "Leads Formulário"
-export type ConversionKey = "conversations" | "whatsapp" | "leadGrouped";
+export type ConversionKey = "conversations" | "whatsapp" | "leadGrouped" | "leadSite";
 export interface ConversionMetric {
   key: ConversionKey;
   label: string; // full name
@@ -120,15 +126,18 @@ export const CONVERSION_METRICS: ConversionMetric[] = [
   { key: "conversations", label: "WhatsApp", short: "WhatsApp", color: "#5a8f22", costLabel: "Custo por WhatsApp" },
   { key: "whatsapp", label: "Leads LP", short: "Leads LP", color: "#e0a010", costLabel: "Custo por Lead LP" },
   { key: "leadGrouped", label: "Leads Formulário", short: "Leads Form.", color: "#cf3a5f", costLabel: "Custo por Lead Formulário" },
+  { key: "leadSite", label: "Lead no site", short: "Lead site", color: "#8a63d4", costLabel: "Custo por Lead no site" },
 ];
 
 // Which campaign strategy (objective) OWNS each conversion action. Cost/rate must
 // be computed from that strategy's OWN spend & clicks — never the global total,
 // which would inflate the cost. See `conversionStats()` in aggregate.ts.
+// (objective = last bracket of the campaign name via parseObjective.)
 export const CONVERSION_OBJECTIVE: Record<ConversionKey, string> = {
   conversations: "WHATSAPP",
-  whatsapp: "CONVERSAO-LP",
+  whatsapp: "CLIQUE BOTAO WPP",
   leadGrouped: "LEAD-ADS",
+  leadSite: "LEAD NO SITE",
 };
 
 // Primary result value for an aggregated Totals given the campaign objective.
@@ -147,7 +156,7 @@ export function emptyTotals(): Totals {
   return {
     spend: 0, clicks: 0, linkClicks: 0, impressions: 0, reach: 0, engagement: 0,
     videoViews: 0, thruplays: 0, p25: 0, p50: 0, p75: 0, p100: 0,
-    whatsapp: 0, conversations: 0, leads: 0, leadGrouped: 0, rows: 0,
+    whatsapp: 0, conversations: 0, leads: 0, leadGrouped: 0, leadSite: 0, rows: 0,
   };
 }
 
@@ -159,7 +168,7 @@ export function sum(rows: Row[]): Totals {
     t.videoViews += r.videoViews; t.thruplays += r.thruplays;
     t.p25 += r.p25; t.p50 += r.p50; t.p75 += r.p75; t.p100 += r.p100;
     t.whatsapp += r.whatsapp; t.conversations += r.conversations; t.leads += r.leads;
-    t.leadGrouped += r.leadGrouped;
+    t.leadGrouped += r.leadGrouped; t.leadSite += r.leadSite;
     t.rows += 1;
   }
   return t;

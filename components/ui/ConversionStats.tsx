@@ -10,7 +10,7 @@ import { brl, int, pct } from "@/lib/format";
 export function ConversionStats({ rows }: { rows: Row[] }) {
   const stats = conversionStats(rows);
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {stats.map((m) => (
         <Card key={m.key} className="relative overflow-hidden p-4">
           <span className="absolute left-0 top-4 h-7 w-[3px] rounded-full" style={{ background: m.color }} />

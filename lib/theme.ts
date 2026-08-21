@@ -47,7 +47,9 @@ export const OBJECTIVE_COLOR: Record<string, string> = {
   ALCANCE: "#2f80c4",
   VIDEOVIEW: "#14a58c",
   WHATSAPP: "#5a8f22",
-  "CONVERSAO-LP": "#e0a010",
+  "CLIQUE BOTAO WPP": "#e0a010",
+  "CONVERSAO-LP": "#e0a010", // legacy alias
+  "LEAD NO SITE": "#8a63d4",
   "LEAD-ADS": "#cf3a5f",
 };
 

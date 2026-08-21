@@ -65,6 +65,7 @@ export interface Row {
   conversations: number;
   leads: number;
   leadGrouped: number;
+  leadSite: number; // actions_offsite_conversion_fb_pixel_lead (campanha LEAD NO SITE)
 }
 
 export interface Totals {
@@ -84,5 +85,6 @@ export interface Totals {
   conversations: number;
   leads: number;
   leadGrouped: number;
+  leadSite: number;
   rows: number;
 }
