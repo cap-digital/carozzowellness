@@ -1,6 +1,7 @@
 // Google Ads API layer (Search + YouTube channels for Carozzo Wellness).
 // Data comes from the server route /api/google-ads (Google Ads API v25), NOT the
 // edge function. Shapes here mirror that route's normalized JSON response.
+import { isValidDate } from "./format";
 
 export type GAdsChannel = "search" | "youtube";
 
@@ -112,12 +113,13 @@ export function gaDerive(t: GAdsTotals): GAdsDerived {
 
 export const gaChannel = (rows: GAdsRow[], channel: GAdsChannel) => rows.filter((r) => r.channel === channel);
 
-export const gaUniqueDates = (rows: GAdsRow[]) => [...new Set(rows.map((r) => r.date))].sort();
+export const gaUniqueDates = (rows: GAdsRow[]) => [...new Set(rows.filter((r) => isValidDate(r.date)).map((r) => r.date))].sort();
 
 // Daily aggregation (chronological) for line/bar charts.
 export function gaDaily(rows: GAdsRow[]) {
   const map = new Map<string, GAdsTotals>();
   for (const r of rows) {
+    if (!isValidDate(r.date)) continue;
     const t = map.get(r.date) ?? { spend: 0, clicks: 0, impressions: 0, conversions: 0, views: 0, rows: 0 };
     t.spend += r.spend; t.clicks += r.clicks; t.impressions += r.impressions; t.conversions += r.conversions; t.views += r.views; t.rows += 1;
     map.set(r.date, t);

@@ -3,6 +3,7 @@
 // + YouTube (Ads API). Programática has no data yet → contributes zeros.
 import type { Totals } from "./types";
 import { derive } from "./metrics";
+import { isValidDate } from "./format";
 import { gaSum, gaDerive, type GAdsRow } from "./googleAds";
 
 export type PlatformKey = "meta" | "google" | "youtube" | "programatica";
@@ -62,8 +63,11 @@ export function combinedDailySpend(
   ...adsDaily: { date: string; spend: number }[][]
 ): { date: string; spend: number }[] {
   const map = new Map<string, number>();
-  for (const p of metaDaily) map.set(p.date, (map.get(p.date) ?? 0) + p.spend);
-  for (const series of adsDaily) for (const p of series) map.set(p.date, (map.get(p.date) ?? 0) + p.spend);
+  const add = (p: { date: string; spend: number }) => {
+    if (isValidDate(p.date)) map.set(p.date, (map.get(p.date) ?? 0) + p.spend);
+  };
+  for (const p of metaDaily) add(p);
+  for (const series of adsDaily) for (const p of series) add(p);
   return [...map.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([date, spend]) => ({ date, spend: +spend.toFixed(2) }));

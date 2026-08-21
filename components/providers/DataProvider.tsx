@@ -5,13 +5,19 @@ import type { ApiResponse, Row } from "@/lib/types";
 import { normalize, uniqueDates } from "@/lib/metrics";
 import { gaUniqueDates, type GAdsCreative, type GAdsDemographics, type GAdsResponse, type GAdsRetention, type GAdsRow, type GAdsTermRow } from "@/lib/googleAds";
 
-export type RangeKey = "all" | "7d" | "3d" | "1d";
+export type RangeKey = "all" | "7d" | "3d" | "1d" | "custom";
 
+export interface CustomRange {
+  start: string;
+  end: string;
+}
+
+// Preset ranges shown as pills (custom range is a separate date picker).
 export const RANGES: { key: RangeKey; label: string }[] = [
   { key: "all", label: "Todo o período" },
   { key: "7d", label: "Últimos 7 dias" },
   { key: "3d", label: "Últimos 3 dias" },
-  { key: "1d", label: "Último dia" },
+  { key: "1d", label: "Ontem" },
 ];
 
 interface Ctx {
@@ -31,6 +37,8 @@ interface Ctx {
   activeDates: string[]; // unique sorted (filtered)
   range: RangeKey;
   setRange: (r: RangeKey) => void;
+  customRange: CustomRange | null;
+  applyCustomRange: (start: string, end: string) => void; // sets range to "custom"
   updatedAt: string | null;
   platforms: { meta: number; google: number; youtube: number; programatica: number };
   refresh: () => void;
@@ -53,7 +61,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [googleLoading, setGoogleLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [range, setRange] = useState<RangeKey>("all");
+  const [customRange, setCustomRange] = useState<CustomRange | null>(null);
   const [nonce, setNonce] = useState(0);
+
+  const applyCustomRange = (start: string, end: string) => {
+    const [lo, hi] = start <= end ? [start, end] : [end, start];
+    setCustomRange({ start: lo, end: hi });
+    setRange("custom");
+  };
 
   useEffect(() => {
     let alive = true;
@@ -95,7 +110,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const gDates = gaUniqueDates(gadsRows);
     return [...new Set([...metaDates, ...gDates])].sort();
   }, [allRows, gadsRows]);
-  const activeDates = useMemo(() => rangeDates(dates, range), [dates, range]);
+  const activeDates = useMemo(() => {
+    if (range === "custom") {
+      if (!customRange) return dates;
+      return dates.filter((d) => d >= customRange.start && d <= customRange.end);
+    }
+    return rangeDates(dates, range);
+  }, [dates, range, customRange]);
 
   const rows = useMemo(() => {
     if (range === "all") return allRows;
@@ -134,6 +155,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     activeDates,
     range,
     setRange,
+    customRange,
+    applyCustomRange,
     updatedAt: raw?.timestamp ?? null,
     platforms: {
       meta: raw?.meta?.length ?? 0,

@@ -5,6 +5,7 @@ import { Menu, RefreshCw, CalendarRange } from "lucide-react";
 import { NAV } from "./nav";
 import { useData, RANGES } from "@/components/providers/DataProvider";
 import { Segmented } from "@/components/ui/Segmented";
+import { DateRangePicker } from "@/components/ui/DateRangePicker";
 import { shortDate } from "@/lib/format";
 
 function useTitle() {
@@ -51,13 +52,14 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
           </div>
         </div>
 
-        <div className="hidden md:block">
+        <div className="hidden items-center gap-2 md:flex">
           <Segmented
             size="sm"
             value={range}
             onChange={setRange}
             options={RANGES.map((r) => ({ value: r.key, label: r.label }))}
           />
+          <DateRangePicker />
         </div>
 
         <button
@@ -72,13 +74,16 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
       </div>
 
       {/* Mobile range filter row */}
-      <div className="md:hidden overflow-x-auto no-scrollbar px-4 pb-2.5">
-        <Segmented
-          size="sm"
-          value={range}
-          onChange={setRange}
-          options={RANGES.map((r) => ({ value: r.key, label: r.label }))}
-        />
+      <div className="flex items-center gap-2 px-4 pb-2.5 md:hidden">
+        <div className="overflow-x-auto no-scrollbar">
+          <Segmented
+            size="sm"
+            value={range}
+            onChange={setRange}
+            options={RANGES.map((r) => ({ value: r.key, label: r.label }))}
+          />
+        </div>
+        <DateRangePicker />
       </div>
     </header>
   );

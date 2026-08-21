@@ -1,4 +1,5 @@
 import { MetaRow, Row, Totals } from "./types";
+import { isValidDate } from "./format";
 
 // ---- coercion --------------------------------------------------------------
 export const num = (v: unknown): number => {
@@ -266,8 +267,11 @@ export function groupSum<T extends string | number>(
   return [...map.entries()].map(([k, rs]) => ({ key: k, totals: sum(rs), rows: rs }));
 }
 
+// Time-series helpers exclude rows with invalid dates so a broken/empty date at
+// the source never becomes a bogus "NaN" bucket. Totals (grouped by objective/
+// demographic, not date) still use ALL rows and stay correct.
 export const byDate = (rows: Row[]) =>
-  groupSum(rows, (r) => r.date).sort((a, b) => a.key.localeCompare(b.key));
+  groupSum(rows.filter((r) => isValidDate(r.date)), (r) => r.date).sort((a, b) => a.key.localeCompare(b.key));
 
 export const uniqueDates = (rows: Row[]) =>
-  [...new Set(rows.map((r) => r.date))].sort();
+  [...new Set(rows.filter((r) => isValidDate(r.date)).map((r) => r.date))].sort();

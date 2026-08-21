@@ -38,9 +38,13 @@ export const compactBRL = (n: number) => {
   return brl(v, 0);
 };
 
-// yyyy-mm-dd -> "13 jul"
+// A valid yyyy-mm-dd date (the source occasionally returns empty/invalid dates).
+export const isValidDate = (d: unknown): d is string => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d);
+
+// yyyy-mm-dd -> "13 jul" (defensive: never renders "NaN undefined" for bad input)
 const MES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 export const shortDate = (iso: string) => {
+  if (!isValidDate(iso)) return "—";
   const [, m, d] = iso.split("-");
   return `${parseInt(d, 10)} ${MES[parseInt(m, 10) - 1]}`;
 };
