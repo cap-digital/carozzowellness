@@ -11,6 +11,15 @@ const LOOKBACK_DAYS = 120;
 const CAMPAIGN_FILTER = "campaign.name LIKE '%CAROZZO WELLNESS%'";
 
 export const revalidate = 300; // 5 min cache
+// Six paginated GAQL queries can outlive the platform default timeout on a cold
+// start; give them room instead of failing the whole Google layer.
+export const maxDuration = 60;
+
+// Warm-lambda cache + single-flight, so repeated CDN misses don't each re-run
+// the full query set. Falls back to the last good payload if the API errors.
+const CACHE_MS = 15 * 60_000;
+let cached: { at: number; body: GAdsResponse } | null = null;
+let inflight: Promise<GAdsResponse> | null = null;
 
 const num = (v: unknown) => {
   const n = typeof v === "number" ? v : parseFloat(String(v ?? ""));
@@ -68,7 +77,27 @@ async function gaqlSearch(token: string, query: string): Promise<any[]> {
   return out;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  // `?refresh=1` is the "Atualizar" button: bypass the caches and re-query.
+  const force = new URL(request.url).searchParams.has("refresh");
+  if (!force && cached && Date.now() - cached.at < CACHE_MS) return ok(cached.body);
+  if (!inflight) inflight = build().finally(() => { inflight = null; });
+  const body = await inflight;
+  return ok(body, force);
+}
+
+const ok = (body: GAdsResponse, noStore = false) =>
+  NextResponse.json(body, {
+    status: 200,
+    headers: {
+      "Cache-Control":
+        noStore || !body.success
+          ? "no-store"
+          : "public, s-maxage=900, stale-while-revalidate=86400",
+    },
+  });
+
+async function build(): Promise<GAdsResponse> {
   const required = [
     "GOOGLE_ADS_CLIENT_ID",
     "GOOGLE_ADS_CLIENT_SECRET",
@@ -80,8 +109,7 @@ export async function GET() {
   const missing = required.filter((k) => !process.env[k]);
   if (missing.length) {
     // Degrade gracefully so the rest of the dashboard keeps working.
-    const empty: GAdsResponse = { success: false, rows: [], searchTerms: [], error: `Faltam envs: ${missing.join(", ")}` };
-    return NextResponse.json(empty, { status: 200 });
+    return { success: false, rows: [], searchTerms: [], error: `Faltam envs: ${missing.join(", ")}` };
   }
 
   try {
@@ -245,11 +273,11 @@ export async function GET() {
     };
 
     const body: GAdsResponse = { success: true, rows, searchTerms, videoRetention, youtubeCreatives, demographics, timestamp: new Date().toISOString() };
-    return NextResponse.json(body, {
-      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
-    });
+    cached = { at: Date.now(), body };
+    return body;
   } catch (e) {
-    const body: GAdsResponse = { success: false, rows: [], searchTerms: [], error: (e as Error).message };
-    return NextResponse.json(body, { status: 200 });
+    // Serve the last good payload rather than blanking the Google layer.
+    if (cached) return cached.body;
+    return { success: false, rows: [], searchTerms: [], error: (e as Error).message };
   }
 }

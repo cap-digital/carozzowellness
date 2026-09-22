@@ -1,8 +1,9 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import type { ApiResponse, Row } from "@/lib/types";
-import { normalize, uniqueDates } from "@/lib/metrics";
+import type { Row } from "@/lib/types";
+import { uniqueDates } from "@/lib/metrics";
+import { expandMeta, type MetaCompact } from "@/lib/compact";
 import { gaUniqueDates, type GAdsCreative, type GAdsDemographics, type GAdsResponse, type GAdsRetention, type GAdsRow, type GAdsTermRow } from "@/lib/googleAds";
 
 export type RangeKey = "all" | "7d" | "3d" | "1d" | "custom";
@@ -55,7 +56,7 @@ function rangeDates(all: string[], range: RangeKey): string[] {
 }
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
-  const [raw, setRaw] = useState<ApiResponse | null>(null);
+  const [raw, setRaw] = useState<MetaCompact | null>(null);
   const [gads, setGads] = useState<GAdsResponse>(EMPTY_GADS);
   const [loading, setLoading] = useState(true);
   const [googleLoading, setGoogleLoading] = useState(true);
@@ -75,13 +76,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     setGoogleLoading(true);
 
+    // The first load takes the cached path (instant); only an explicit
+    // "Atualizar" click asks the routes to go back to the source.
+    const qs = nonce > 0 ? "?refresh=1" : "";
+
     // Meta + Programática (edge) — required. Gates the page skeleton so the
     // dashboard renders as soon as Meta is ready, without waiting on Google Ads.
-    fetch("/api/meta")
+    fetch(`/api/meta${qs}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((meta: ApiResponse) => {
+      .then((meta: MetaCompact) => {
         if (!alive) return;
-        if (!meta.success) throw new Error("Resposta sem sucesso");
+        if (!meta.success) throw new Error(meta.error || "Resposta sem sucesso");
         setRaw(meta);
         setError(null);
       })
@@ -90,7 +95,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     // Google Search + YouTube (Google Ads API) — loads in the background and
     // fills in when ready. Degrades gracefully on failure.
-    fetch("/api/google-ads")
+    fetch(`/api/google-ads${qs}`)
       .then((r) => r.json())
       .then((g: GAdsResponse) => alive && setGads(g && Array.isArray(g.rows) ? g : EMPTY_GADS))
       .catch(() => alive && setGads(EMPTY_GADS))
@@ -101,7 +106,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     };
   }, [nonce]);
 
-  const allRows = useMemo<Row[]>(() => (raw?.meta ? raw.meta.map(normalize) : []), [raw]);
+  const allRows = useMemo<Row[]>(() => (raw ? expandMeta(raw) : []), [raw]);
   const gadsRows = gads.rows;
 
   // Unified date window across all platforms so the range filter is consistent.
@@ -159,10 +164,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     applyCustomRange,
     updatedAt: raw?.timestamp ?? null,
     platforms: {
-      meta: raw?.meta?.length ?? 0,
+      meta: raw?.rows.length ?? 0,
       google: gadsRows.filter((r) => r.channel === "search").length,
       youtube: gadsRows.filter((r) => r.channel === "youtube").length,
-      programatica: raw?.programatica?.length ?? 0,
+      programatica: raw?.programatica ?? 0,
     },
     refresh: () => setNonce((n) => n + 1),
   };

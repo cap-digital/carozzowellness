@@ -1,43 +1,115 @@
 import { NextResponse } from "next/server";
+import { revalidateTag, unstable_cache } from "next/cache";
 import type { ApiResponse } from "@/lib/types";
+import { encodeMeta, type MetaCompact } from "@/lib/compact";
 
 // Server-side proxy to the Carozzo Wellness Supabase edge function.
-// Keeps the key off the client bundle and lets us cache the payload.
+//
+// Two upstream problems this route exists to absorb:
+//  1. Size — upstream returns ~26 MB, well past Vercel's 4.5 MB response limit,
+//     which is exactly what surfaced as "HTTP 502" on the dashboard. We
+//     dictionary-encode it down to ~1 MB before it ever leaves this function.
+//  2. Latency — the edge function answers in anywhere from 30s to 150s. No
+//     serverless function can wait that long, so a visitor must never be the
+//     one waiting on it. Every layer below exists to make sure they aren't.
 const ENDPOINT = "https://cqrpbiepyeypbkizwacu.supabase.co/functions/v1/CarozzoWellness";
 const KEY = "sb_publishable_YN9YKLw6sludrgf9T2i_1g_Dcm8dIiK";
 
-export const revalidate = 300; // 5 min ISR-style cache
+export const maxDuration = 60; // upstream needs far more than the 10–15s default
+export const dynamic = "force-dynamic";
 
-export async function GET() {
+const UPSTREAM_TIMEOUT_MS = 50_000; // leave room inside maxDuration to encode + reply
+const TTL_SECONDS = 900; // 15 min
+const MEMORY_STALE_MS = 24 * 60 * 60_000; // last-resort fallback window
+
+// Layer 1 — warm lambda memory. Also the safety net when upstream is having a
+// 150s day: a stale dashboard beats an error screen.
+let memo: { at: number; body: MetaCompact } | null = null;
+let inflight: Promise<MetaCompact> | null = null;
+
+async function fetchUpstream(): Promise<MetaCompact> {
+  const res = await fetch(ENDPOINT, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${KEY}`,
+      apikey: KEY,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ name: "Functions" }),
+    cache: "no-store", // 26 MB is far past the Data Cache entry limit
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(`Upstream ${res.status}`);
+
+  const data = (await res.json()) as ApiResponse;
+  if (!data?.success || !Array.isArray(data.meta)) throw new Error("Resposta sem sucesso");
+  return encodeMeta(data.meta, data.timestamp ?? new Date().toISOString(), data.programatica?.length ?? 0);
+}
+
+// Layer 2 — Vercel's Data Cache, shared across lambdas, regions and deploys, so
+// a cold start doesn't mean another 30s+ round trip. The RAW response is way too
+// big to cache, but the ENCODED payload (~1 MB) fits the 2 MB entry limit.
+const CACHE_TAG = "carozzo-meta";
+const cachedUpstream = unstable_cache(fetchUpstream, ["carozzo-meta-v1"], {
+  revalidate: TTL_SECONDS,
+  tags: [CACHE_TAG],
+});
+
+// Collapse concurrent misses onto one upstream call instead of N × 30s.
+function load(force: boolean): Promise<MetaCompact> {
+  if (!inflight) {
+    // A forced refresh drops the shared entry first, so the same round trip
+    // that answers this request also repopulates the cache for everyone else.
+    if (force) revalidateTag(CACHE_TAG);
+    inflight = cachedUpstream()
+      .then((body) => {
+        memo = { at: Date.now(), body };
+        return body;
+      })
+      .finally(() => {
+        inflight = null;
+      });
+  }
+  return inflight;
+}
+
+const send = (body: MetaCompact, sMaxAge: number | null) =>
+  NextResponse.json(body, {
+    headers: {
+      // Layer 3 — the CDN. `stale-while-revalidate` is the important half: once
+      // an entry exists, visitors get it instantly while the refresh happens in
+      // the background, so upstream latency stops being user-visible entirely.
+      "Cache-Control":
+        sMaxAge === null
+          ? "no-store"
+          : `public, s-maxage=${sMaxAge}, stale-while-revalidate=86400`,
+    },
+  });
+
+export async function GET(request: Request) {
+  // `?refresh=1` is the "Atualizar" button: skip every cache and pay the round
+  // trip. Plain page loads always take the cached path.
+  const force = new URL(request.url).searchParams.has("refresh");
+  const age = memo ? Date.now() - memo.at : Infinity;
+
+  if (!force && memo && age < TTL_SECONDS * 1000) return send(memo.body, TTL_SECONDS);
+
   try {
-    const res = await fetch(ENDPOINT, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${KEY}`,
-        apikey: KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ name: "Functions" }),
-      // Payload is ~2.1MB — above Next's Data Cache limit; cache the route
-      // render (revalidate above) + browser via Cache-Control instead.
-      cache: "no-store",
-    });
-
-    if (!res.ok) {
-      return NextResponse.json(
-        { success: false, error: `Upstream ${res.status}` },
-        { status: 502 }
-      );
-    }
-
-    const data = (await res.json()) as ApiResponse;
-    return NextResponse.json(data, {
-      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
-    });
+    return send(await load(force), force ? null : TTL_SECONDS);
   } catch (e) {
-    return NextResponse.json(
-      { success: false, error: (e as Error).message },
-      { status: 500 }
-    );
+    // Upstream timed out or errored. Serve whatever we last had.
+    if (memo && age < MEMORY_STALE_MS) return send(memo.body, 60);
+    const body: MetaCompact = {
+      success: false,
+      dict: { dates: [], campaigns: [], adsets: [], ads: [], ages: [], genders: [] },
+      rows: [],
+      programatica: 0,
+      timestamp: new Date().toISOString(),
+      error:
+        (e as Error).name === "TimeoutError"
+          ? "A fonte de dados demorou demais para responder. Tente novamente em instantes."
+          : (e as Error).message,
+    };
+    return NextResponse.json(body, { status: 200, headers: { "Cache-Control": "no-store" } });
   }
 }

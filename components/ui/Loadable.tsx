@@ -3,10 +3,10 @@
 import React from "react";
 import { useData } from "@/components/providers/DataProvider";
 import { PageSkeleton } from "./Skeleton";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, RefreshCw } from "lucide-react";
 
 export function Loadable({ children }: { children: React.ReactNode }) {
-  const { loading, error, allRows } = useData();
+  const { loading, error, allRows, refresh } = useData();
 
   if (loading && allRows.length === 0) return <PageSkeleton />;
 
@@ -20,6 +20,16 @@ export function Loadable({ children }: { children: React.ReactNode }) {
           Não foi possível carregar os dados
         </h3>
         <p className="mt-1.5 max-w-sm text-[13px] text-[var(--text-secondary)]">{error}</p>
+        {/* The source is slow and occasionally times out — make a second try
+            one click away instead of a page reload. */}
+        <button
+          onClick={refresh}
+          disabled={loading}
+          className="mt-4 flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-1.5 text-[12px] font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-50"
+        >
+          <RefreshCw size={14} className={loading ? "animate-spin" : undefined} />
+          {loading ? "Carregando…" : "Tentar novamente"}
+        </button>
       </div>
     );
   }
