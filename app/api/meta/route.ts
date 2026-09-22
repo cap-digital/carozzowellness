@@ -44,10 +44,28 @@ async function fetchUpstream(): Promise<MetaCompact> {
   });
   if (!res.ok) throw new Error(`Upstream ${res.status}`);
 
-  const data = (await res.json()) as ApiResponse;
-  if (!data?.success || !Array.isArray(data.meta)) throw new Error("Resposta sem sucesso");
+  const data = (await res.json()) as ApiResponse | UpstreamCompact;
+  if (!data?.success) throw new Error("Resposta sem sucesso");
+
+  // The Apps Script (scripts/apps-script/Code.gs) now ships the compact format
+  // itself, pre-built on a timer. Older deployments still send raw rows, so
+  // both shapes are accepted and the switch-over needs no coordination.
+  if ("dict" in data && Array.isArray(data.rows)) {
+    const prog = data.programatica;
+    return {
+      success: true,
+      dict: data.dict,
+      rows: data.rows,
+      programatica: Array.isArray(prog) ? prog.length : Number(prog) || 0,
+      timestamp: data.timestamp ?? new Date().toISOString(),
+    };
+  }
+  if (!("meta" in data) || !Array.isArray(data.meta)) throw new Error("Resposta sem sucesso");
   return encodeMeta(data.meta, data.timestamp ?? new Date().toISOString(), data.programatica?.length ?? 0);
 }
+
+// Shape emitted by the Apps Script's compact mode (format "compact-v1").
+type UpstreamCompact = Omit<MetaCompact, "programatica"> & { format?: string; programatica: unknown[] | number };
 
 // Layer 2 — Vercel's Data Cache, shared across lambdas, regions and deploys, so
 // a cold start doesn't mean another 30s+ round trip. The RAW response is way too
