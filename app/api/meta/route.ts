@@ -9,16 +9,19 @@ import { encodeMeta, type MetaCompact } from "@/lib/compact";
 //  1. Size — upstream returns ~26 MB, well past Vercel's 4.5 MB response limit,
 //     which is exactly what surfaced as "HTTP 502" on the dashboard. We
 //     dictionary-encode it down to ~1 MB before it ever leaves this function.
-//  2. Latency — the edge function answers in anywhere from 30s to 150s. No
-//     serverless function can wait that long, so a visitor must never be the
-//     one waiting on it. Every layer below exists to make sure they aren't.
+//  2. Latency — the edge function answers in anywhere from 30s to 150s. The
+//     caches below keep visitors from waiting on it, but SOMEONE has to wait
+//     for the fill — and after a deploy (CDN purged) that's the first visitor.
 const ENDPOINT = "https://cqrpbiepyeypbkizwacu.supabase.co/functions/v1/CarozzoWellness";
 const KEY = "sb_publishable_YN9YKLw6sludrgf9T2i_1g_Dcm8dIiK";
 
-export const maxDuration = 60; // upstream needs far more than the 10–15s default
+// Upstream has been measured at up to 150s. With a 60s cap a slow day means the
+// cache can never be filled at all (seen in prod right after a deploy), so give
+// the fill room to finish. 300s is the Fluid Compute ceiling on every plan.
+export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
-const UPSTREAM_TIMEOUT_MS = 50_000; // leave room inside maxDuration to encode + reply
+const UPSTREAM_TIMEOUT_MS = 280_000; // leave room inside maxDuration to encode + reply
 const TTL_SECONDS = 900; // 15 min
 const MEMORY_STALE_MS = 24 * 60 * 60_000; // last-resort fallback window
 
