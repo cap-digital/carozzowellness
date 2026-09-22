@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -23,12 +23,15 @@ import { Badge } from "@/components/ui/Badge";
 import { Donut } from "@/components/charts/Donut";
 import { ConversionStats } from "@/components/ui/ConversionStats";
 import { CreativeThumb } from "@/components/ui/CreativeThumb";
+import { MultiDropdown } from "@/components/ui/MultiDropdown";
+import { SegmentName } from "@/components/ui/SegmentName";
 import { makeTooltip } from "@/components/charts/ChartTooltip";
 import { sum, derive, groupSum, byDate, CONVERSION_METRICS, CONVERSION_OBJECTIVE } from "@/lib/metrics";
-import { objectiveBreakdown, placementBreakdown, adBreakdown } from "@/lib/aggregate";
-import { brl, int, pct, compact, compactBRL, resultNum, shortDate } from "@/lib/format";
+import { objectiveBreakdown, placementBreakdown, adBreakdown, adsetBreakdown } from "@/lib/aggregate";
+import { brl, dec, int, pct, compact, compactBRL, resultNum, shortDate } from "@/lib/format";
 import { CHART, OBJECTIVE_COLOR, FORMAT_COLOR } from "@/lib/theme";
 import { Aperture, ExternalLink } from "lucide-react";
+import type { Row } from "@/lib/types";
 
 export default function MetaPage() {
   return (
@@ -294,7 +297,7 @@ function Meta() {
                       href={c.permalink || undefined}
                     />
                     <div className="min-w-0">
-                      <div className="truncate text-[13.5px] font-semibold text-[var(--text-primary)]" title={c.ad}>
+                      <div className="break-words text-[13.5px] font-semibold leading-snug text-[var(--text-primary)]" title={c.ad}>
                         {c.ad.replace(/ - Carozzo Wellness/i, "").replace(/^AD /, "AD ")}
                       </div>
                       <div className="text-[11.5px] text-[var(--text-muted)]">{c.format}</div>
@@ -375,7 +378,172 @@ function Meta() {
           />
         </Card>
       </Reveal>
+
+      {/* Ad set drill-down */}
+      <Reveal delay={220}>
+        <AdsetTable rows={rows} />
+      </Reveal>
     </div>
+  );
+}
+
+// ---- Ad set ("conjunto de anúncios") table ----------------------------------
+// Campaign → ad set drill-down. Two multi-select filters narrow a long list
+// (campaigns, then a searchable ad set picker scoped to them), every column
+// sorts, and the totals row always reflects exactly what's on screen.
+// An empty selection means "all".
+function AdsetTable({ rows }: { rows: Row[] }) {
+  const sets = useMemo(() => adsetBreakdown(rows), [rows]);
+  const [camps, setCamps] = useState<string[]>([]);
+  const [picks, setPicks] = useState<string[]>([]);
+
+  const objectives = useMemo(() => [...new Set(sets.map((s) => s.objective))], [sets]);
+  const inCamp = camps.length ? sets.filter((s) => camps.includes(s.objective)) : sets;
+  const shown = picks.length ? inCamp.filter((s) => picks.includes(s.key)) : inCamp;
+
+  const campOptions = objectives.map((o) => ({ value: o, label: o, color: OBJECTIVE_COLOR[o] ?? "#888" }));
+  const setOptions = inCamp.map((s) => ({ value: s.key, label: `${s.adset} · ${s.objective}`, color: s.color }));
+
+  // Narrowing the campaigns drops any picked ad sets that fell out of scope,
+  // instead of wiping the whole selection.
+  const changeCamps = (next: string[]) => {
+    setCamps(next);
+    if (next.length) setPicks((p) => p.filter((k) => sets.some((s) => s.key === k && next.includes(s.objective))));
+  };
+
+  // Footer = the visible sets only. A result total only makes sense when every
+  // visible set shares one métrica mãe; otherwise it would sum unlike actions.
+  const shownKeys = new Set(shown.map((s) => s.key));
+  const ft = sum(rows.filter((r) => shownKeys.has(`${r.campaign}||${r.adset}`)));
+  const fd = derive(ft);
+  const oneObjective = new Set(shown.map((s) => s.objective)).size === 1 ? shown[0] : null;
+
+  const costInfo = (s: (typeof sets)[number]) => {
+    if (s.objective === "ALCANCE") return { label: "CPM", value: brl(s.derived.cpm), num: s.derived.cpm };
+    if (s.objective === "VIDEOVIEW") return { label: "CPV", value: brl(s.derived.cpv, 3), num: s.derived.cpv };
+    return { label: "por resultado", value: s.primaryValue > 0 ? brl(s.costPerResult) : "—", num: s.costPerResult };
+  };
+
+  type SRow = (typeof sets)[number];
+  const cols: Column<SRow>[] = [
+    {
+      key: "adset",
+      header: "Conjunto de anúncios",
+      render: (s) => (
+        <div className="min-w-[230px] max-w-[330px] py-0.5">
+          <SegmentName name={s.adset} color={s.color} />
+          <div className="mt-1 flex items-center gap-1.5 text-[11px] text-[var(--text-muted)]">
+            <span className="h-2 w-2 rounded-[2px]" style={{ background: s.color }} />
+            {s.objective} · {s.ads} {s.ads === 1 ? "anúncio" : "anúncios"}
+          </div>
+        </div>
+      ),
+      sortValue: (s) => s.adset,
+    },
+    { key: "spend", header: "Investido", align: "right", render: (s) => brl(s.totals.spend), sortValue: (s) => s.totals.spend },
+    { key: "impr", header: "Impressões", align: "right", render: (s) => int(s.totals.impressions), sortValue: (s) => s.totals.impressions },
+    {
+      key: "reach",
+      header: "Alcance",
+      align: "right",
+      render: (s) => (
+        <>
+          <div>{int(s.totals.reach)}</div>
+          <div className="text-[10.5px] text-[var(--text-muted)]">freq. {dec(s.derived.frequency)}</div>
+        </>
+      ),
+      sortValue: (s) => s.totals.reach,
+    },
+    { key: "cpm", header: "CPM", align: "right", render: (s) => brl(s.derived.cpm), sortValue: (s) => s.derived.cpm },
+    { key: "clicks", header: "Cliques link", align: "right", render: (s) => int(s.totals.linkClicks), sortValue: (s) => s.totals.linkClicks },
+    { key: "ctr", header: "CTR", align: "right", render: (s) => pct(s.derived.ctrLink), sortValue: (s) => s.derived.ctrLink },
+    { key: "cpc", header: "CPC", align: "right", render: (s) => brl(s.derived.cpcLink), sortValue: (s) => s.derived.cpcLink },
+    {
+      key: "result",
+      header: "Resultado",
+      align: "right",
+      render: (s) => (
+        <span className="whitespace-nowrap">
+          <span className="font-semibold" style={{ color: s.color }}>{resultNum(s.primaryValue)}</span>{" "}
+          <span className="text-[10.5px] text-[var(--text-muted)]">{s.primary?.short ?? ""}</span>
+        </span>
+      ),
+      sortValue: (s) => s.primaryValue,
+    },
+    {
+      key: "cost",
+      header: "Custo",
+      align: "right",
+      render: (s) => {
+        const ci = costInfo(s);
+        return (
+          <span className="whitespace-nowrap">
+            <span className="font-semibold text-[var(--text-primary)]">{ci.value}</span>{" "}
+            <span className="text-[10.5px] text-[var(--text-muted)]">{ci.label}</span>
+          </span>
+        );
+      },
+      sortValue: (s) => costInfo(s).num,
+    },
+  ];
+
+  return (
+    <>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-baseline gap-3">
+          <h2 className="text-[13px] font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">
+            Conjuntos de anúncios
+          </h2>
+          <span className="text-[12px] text-[var(--text-muted)]">filtre, busque e ordene por qualquer coluna</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <MultiDropdown
+            options={campOptions}
+            value={camps}
+            onChange={changeCamps}
+            allLabel="Todas as campanhas"
+            unit={["campanha", "campanhas"]}
+          />
+          <MultiDropdown
+            align="right"
+            searchable
+            wide
+            options={setOptions}
+            value={picks}
+            onChange={setPicks}
+            allLabel={`Todos os conjuntos (${inCamp.length})`}
+            unit={["conjunto", "conjuntos"]}
+          />
+        </div>
+      </div>
+      <Card className="p-1.5">
+        <DataTable
+          columns={cols}
+          data={shown}
+          rowKey={(s) => s.key}
+          initialSort={{ key: "spend", dir: "desc" }}
+          maxHeight={620}
+          dense
+          footer={{
+            adset: `Total · ${shown.length} ${shown.length === 1 ? "conjunto" : "conjuntos"}`,
+            spend: brl(ft.spend),
+            impr: int(ft.impressions),
+            reach: (
+              <>
+                <div>{int(ft.reach)}</div>
+                <div className="text-[10.5px] font-normal text-[var(--text-muted)]">freq. {dec(fd.frequency)}</div>
+              </>
+            ),
+            cpm: brl(fd.cpm),
+            clicks: int(ft.linkClicks),
+            ctr: pct(fd.ctrLink),
+            cpc: brl(fd.cpcLink),
+            result: oneObjective ? resultNum(shown.reduce((a, s) => a + s.primaryValue, 0)) : "—",
+            cost: "",
+          }}
+        />
+      </Card>
+    </>
   );
 }
 

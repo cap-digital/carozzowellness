@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   ComposedChart,
   AreaChart,
@@ -20,9 +20,12 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { PageSkeleton } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/Badge";
 import { Funnel } from "@/components/charts/Funnel";
+import { DataTable, Column } from "@/components/ui/DataTable";
+import { Dropdown } from "@/components/ui/Dropdown";
+import { SegmentName } from "@/components/ui/SegmentName";
 import { Donut } from "@/components/charts/Donut";
 import { makeTooltip, TipShell } from "@/components/charts/ChartTooltip";
-import { gaSum, gaDerive, gaDaily } from "@/lib/googleAds";
+import { gaSum, gaDerive, gaDaily, gaByAdGroup, type GAdsAdGroupRow, type GAdsAdGroupStat } from "@/lib/googleAds";
 import { brl, int, pct, compact, shortDate } from "@/lib/format";
 import { CHART } from "@/lib/theme";
 import { MonitorPlay, Clock } from "lucide-react";
@@ -40,7 +43,7 @@ export default function YoutubePage() {
 }
 
 function Youtube() {
-  const { youtubeRows: rows, videoRetention, googleLoading } = useData();
+  const { youtubeRows: rows, youtubeAdGroups, videoRetention, googleLoading } = useData();
 
   const t = useMemo(() => gaSum(rows), [rows]);
   const d = useMemo(() => gaDerive(t), [t]);
@@ -210,6 +213,117 @@ function Youtube() {
           </ChartCard>
         </div>
       </Reveal>
+
+      {/* Ad group drill-down */}
+      <Reveal delay={180}>
+        <AdGroupTable rows={youtubeAdGroups} />
+      </Reveal>
     </div>
+  );
+}
+
+// ---- Ad group ("conjunto") table --------------------------------------------
+// Same pattern as Meta's ad set table: campaign filter, searchable ad group
+// picker, sortable columns, and a totals row for what's on screen.
+function AdGroupTable({ rows }: { rows: GAdsAdGroupRow[] }) {
+  const groups = useMemo(() => gaByAdGroup(rows), [rows]);
+  const [camp, setCamp] = useState("all");
+  const [pick, setPick] = useState("all");
+
+  const campaigns = useMemo(() => [...new Set(groups.map((g) => g.campaign))], [groups]);
+  const inCamp = camp === "all" ? groups : groups.filter((g) => g.campaign === camp);
+  const shown = pick === "all" ? inCamp : inCamp.filter((g) => g.key === pick);
+
+  const campOptions = [
+    { value: "all", label: "Todas as campanhas", color: WINE },
+    ...campaigns.map((c) => ({ value: c, label: c.replace(/\[(ID3|YOUTUBE|CAROZZO WELLNESS)\]\s*/g, "").trim() || c, color: WINE })),
+  ];
+  const groupOptions = [
+    { value: "all", label: `Todos os grupos (${inCamp.length})` },
+    ...inCamp.map((g) => ({ value: g.key, label: g.adGroup, color: WINE })),
+  ];
+
+  const shownKeys = new Set(shown.map((g) => g.key));
+  const visible = rows.filter((r) => shownKeys.has(`${r.campaign}||${r.adGroup}`));
+  const ft = gaSum(visible.map((r) => ({ ...r, channel: "youtube" as const })));
+  const fd = gaDerive(ft);
+  const fq = (k: "q25" | "q100") => (ft.views > 0 ? (visible.reduce((a, r) => a + r[k], 0) / ft.views) * 100 : 0);
+
+  const cols: Column<GAdsAdGroupStat>[] = [
+    {
+      key: "group",
+      header: "Grupo de anúncios",
+      render: (g) => (
+        <div className="min-w-[220px] max-w-[320px] py-0.5">
+          <SegmentName name={g.adGroup} color={WINE} />
+          <div className="mt-1 break-words text-[11px] text-[var(--text-muted)]">{g.campaign}</div>
+        </div>
+      ),
+      sortValue: (g) => g.adGroup,
+    },
+    { key: "spend", header: "Investido", align: "right", render: (g) => brl(g.spend), sortValue: (g) => g.spend },
+    { key: "impr", header: "Impressões", align: "right", render: (g) => int(g.impressions), sortValue: (g) => g.impressions },
+    { key: "views", header: "Views", align: "right", render: (g) => int(g.views), sortValue: (g) => g.views },
+    { key: "vtr", header: "VTR", align: "right", render: (g) => pct(g.vtr), sortValue: (g) => g.vtr },
+    { key: "cpv", header: "CPV", align: "right", render: (g) => brl(g.cpv, 3), sortValue: (g) => g.cpv },
+    { key: "cpm", header: "CPM", align: "right", render: (g) => brl(g.cpm), sortValue: (g) => g.cpm },
+    { key: "clicks", header: "Cliques", align: "right", render: (g) => int(g.clicks), sortValue: (g) => g.clicks },
+    { key: "ctr", header: "CTR", align: "right", render: (g) => pct(g.ctr), sortValue: (g) => g.ctr },
+    { key: "cpc", header: "CPC", align: "right", render: (g) => (g.clicks > 0 ? brl(g.cpc) : "—"), sortValue: (g) => g.cpc },
+    { key: "p25", header: "Ret. 25%", align: "right", render: (g) => pct(g.p25, 1), sortValue: (g) => g.p25 },
+    { key: "p100", header: "Ret. 100%", align: "right", render: (g) => <span style={{ color: TEAL }} className="font-semibold">{pct(g.p100, 1)}</span>, sortValue: (g) => g.p100 },
+  ];
+
+  return (
+    <>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-baseline gap-3">
+          <h2 className="text-[13px] font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">
+            Grupos de anúncios
+          </h2>
+          <span className="text-[12px] text-[var(--text-muted)]">filtre, busque e ordene por qualquer coluna</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Dropdown
+            size="sm"
+            options={campOptions}
+            value={camp}
+            onChange={(v) => {
+              setCamp(v);
+              setPick("all");
+            }}
+          />
+          <Dropdown size="sm" align="right" searchable wide options={groupOptions} value={pick} onChange={setPick} />
+        </div>
+      </div>
+      <Card className="p-1.5">
+        {shown.length === 0 ? (
+          <div className="px-4 py-10 text-center text-[12.5px] text-[var(--text-muted)]">Sem grupos de anúncios no período</div>
+        ) : (
+          <DataTable
+            columns={cols}
+            data={shown}
+            rowKey={(g) => g.key}
+            initialSort={{ key: "spend", dir: "desc" }}
+            maxHeight={620}
+            dense
+            footer={{
+              group: `Total · ${shown.length} ${shown.length === 1 ? "grupo" : "grupos"}`,
+              spend: brl(ft.spend),
+              impr: int(ft.impressions),
+              views: int(ft.views),
+              vtr: pct(fd.vtr),
+              cpv: brl(fd.cpv, 3),
+              cpm: brl(fd.cpm),
+              clicks: int(ft.clicks),
+              ctr: pct(fd.ctr),
+              cpc: ft.clicks > 0 ? brl(fd.cpc) : "—",
+              p25: pct(fq("q25"), 1),
+              p100: pct(fq("q100"), 1),
+            }}
+          />
+        )}
+      </Card>
+    </>
   );
 }

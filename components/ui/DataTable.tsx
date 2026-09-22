@@ -19,13 +19,18 @@ export function DataTable<T>({
   initialSort,
   rowKey,
   maxHeight,
+  footer,
+  dense,
 }: {
   columns: Column<T>[];
   data: T[];
   initialSort?: { key: string; dir: "asc" | "desc" };
   rowKey: (row: T, i: number) => string;
   maxHeight?: number;
+  footer?: Record<string, React.ReactNode>; // totals row, keyed by column key
+  dense?: boolean; // tighter cell padding for wide tables
 }) {
+  const px = dense ? "px-2" : "px-3";
   const [sort, setSort] = useState(initialSort ?? null);
 
   const sorted = useMemo(() => {
@@ -59,7 +64,8 @@ export function DataTable<T>({
                 key={c.key}
                 style={{ width: c.width }}
                 className={cn(
-                  "whitespace-nowrap px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]",
+                  "whitespace-nowrap py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]",
+                  px,
                   c.align === "right" ? "text-right" : "text-left"
                 )}
               >
@@ -92,7 +98,8 @@ export function DataTable<T>({
                 <td
                   key={c.key}
                   className={cn(
-                    "px-3 py-2.5 align-middle",
+                    "py-2.5 align-middle",
+                    px,
                     c.align === "right" ? "text-right tnum" : "text-left"
                   )}
                 >
@@ -102,6 +109,24 @@ export function DataTable<T>({
             </tr>
           ))}
         </tbody>
+        {footer && (
+          <tfoot className="sticky bottom-0 bg-[var(--surface-2)]">
+            <tr className="border-t border-[var(--border)]">
+              {columns.map((c) => (
+                <td
+                  key={c.key}
+                  className={cn(
+                    "py-2.5 align-middle font-semibold text-[var(--text-primary)]",
+                    px,
+                    c.align === "right" ? "text-right tnum" : "text-left"
+                  )}
+                >
+                  {footer[c.key] ?? null}
+                </td>
+              ))}
+            </tr>
+          </tfoot>
+        )}
       </table>
     </div>
   );

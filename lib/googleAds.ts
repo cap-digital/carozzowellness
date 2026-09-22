@@ -58,12 +58,30 @@ export interface GAdsDemographics {
   youtube: GAdsChannelDemo;
 }
 
+// YouTube ad group ("conjunto") per day. Quartile fields hold rate × views so
+// they can be summed across days; divide the sum by views to get the rate back.
+export interface GAdsAdGroupRow {
+  date: string;
+  campaign: string;
+  adGroup: string;
+  spend: number;
+  clicks: number;
+  impressions: number;
+  views: number;
+  conversions: number;
+  q25: number;
+  q50: number;
+  q75: number;
+  q100: number;
+}
+
 export interface GAdsResponse {
   success: boolean;
   rows: GAdsRow[];
   searchTerms: GAdsTermRow[];
   videoRetention?: GAdsRetention | null;
   youtubeCreatives?: GAdsCreative[];
+  youtubeAdGroups?: GAdsAdGroupRow[];
   demographics?: GAdsDemographics;
   timestamp?: string;
   error?: string;
@@ -171,4 +189,48 @@ export function gaTerms(terms: GAdsTermRow[]) {
   return [...terms]
     .map((t) => ({ ...t, ctr: div(t.clicks, t.impressions) * 100, cpc: div(t.spend, t.clicks) }))
     .sort((a, b) => b.impressions - a.impressions);
+}
+
+export interface GAdsAdGroupStat extends GAdsDerived {
+  key: string;
+  campaign: string;
+  adGroup: string;
+  spend: number;
+  clicks: number;
+  impressions: number;
+  views: number;
+  conversions: number;
+  p25: number; // % of views reaching each quartile
+  p50: number;
+  p75: number;
+  p100: number;
+}
+
+// Aggregate YouTube ad groups over the active window, sorted by spend desc.
+export function gaByAdGroup(rows: GAdsAdGroupRow[]): GAdsAdGroupStat[] {
+  const map = new Map<string, GAdsAdGroupRow>();
+  for (const r of rows) {
+    const k = `${r.campaign}||${r.adGroup}`;
+    const a = map.get(k) ?? { ...r, spend: 0, clicks: 0, impressions: 0, views: 0, conversions: 0, q25: 0, q50: 0, q75: 0, q100: 0 };
+    a.spend += r.spend; a.clicks += r.clicks; a.impressions += r.impressions; a.views += r.views;
+    a.conversions += r.conversions; a.q25 += r.q25; a.q50 += r.q50; a.q75 += r.q75; a.q100 += r.q100;
+    map.set(k, a);
+  }
+  return [...map.entries()]
+    .map(([key, a]) => ({
+      key,
+      campaign: a.campaign,
+      adGroup: a.adGroup,
+      spend: a.spend,
+      clicks: a.clicks,
+      impressions: a.impressions,
+      views: a.views,
+      conversions: a.conversions,
+      ...gaDerive({ ...a, rows: 0 }),
+      p25: div(a.q25, a.views) * 100,
+      p50: div(a.q50, a.views) * 100,
+      p75: div(a.q75, a.views) * 100,
+      p100: div(a.q100, a.views) * 100,
+    }))
+    .sort((a, b) => b.spend - a.spend);
 }

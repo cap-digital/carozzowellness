@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from "
 import type { Row } from "@/lib/types";
 import { uniqueDates } from "@/lib/metrics";
 import { expandMeta, type MetaCompact } from "@/lib/compact";
-import { gaUniqueDates, type GAdsCreative, type GAdsDemographics, type GAdsResponse, type GAdsRetention, type GAdsRow, type GAdsTermRow } from "@/lib/googleAds";
+import { gaUniqueDates, type GAdsAdGroupRow, type GAdsCreative, type GAdsDemographics, type GAdsResponse, type GAdsRetention, type GAdsRow, type GAdsTermRow } from "@/lib/googleAds";
 
 export type RangeKey = "all" | "7d" | "3d" | "1d" | "custom";
 
@@ -31,6 +31,7 @@ interface Ctx {
   searchTerms: GAdsTermRow[]; // Search terms (aggregated over the API window)
   videoRetention: GAdsRetention | null; // YouTube quartile retention
   youtubeCreatives: GAdsCreative[]; // YouTube video creatives
+  youtubeAdGroups: GAdsAdGroupRow[]; // YouTube ad groups per day, filtered by range
   demographics: GAdsDemographics | null; // Google/YouTube age + gender
   googleLoading: boolean; // Google Ads layer still loading (Meta already rendered)
   googleError: string | null; // Google Ads layer failed (Meta still works)
@@ -143,6 +144,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [gadsRows, inRange]
   );
 
+  const youtubeAdGroups = useMemo(
+    () => (gads.youtubeAdGroups ?? []).filter((r) => range === "all" || new Set(activeDates).has(r.date)),
+    [gads.youtubeAdGroups, activeDates, range]
+  );
+
   const value: Ctx = {
     loading,
     error,
@@ -153,6 +159,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     searchTerms: gads.searchTerms ?? [],
     videoRetention: gads.videoRetention ?? null,
     youtubeCreatives: gads.youtubeCreatives ?? [],
+    youtubeAdGroups,
     demographics: gads.demographics ?? null,
     googleLoading,
     googleError: gads.success ? null : gads.error ?? null,

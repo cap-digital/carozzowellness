@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { OAuth2Client } from "google-auth-library";
-import type { GAdsChannel, GAdsCreative, GAdsDemoBucket, GAdsDemographics, GAdsResponse, GAdsRetention, GAdsRow, GAdsTermRow } from "@/lib/googleAds";
+import type { GAdsAdGroupRow, GAdsChannel, GAdsCreative, GAdsDemoBucket, GAdsDemographics, GAdsResponse, GAdsRetention, GAdsRow, GAdsTermRow } from "@/lib/googleAds";
 
 // Server-side Google Ads API integration (v25) for Carozzo Wellness.
 // Channels: Search ([ID3] [SEARCH] …) and YouTube ([ID3] [YOUTUBE] …, Video).
@@ -117,7 +117,7 @@ async function build(): Promise<GAdsResponse> {
     const range = dateRange();
 
     // These queries are independent — run them in parallel to cut latency.
-    const [campaignRows, termRows, retRows, adRows, ageRows, genderRows] = await Promise.all([
+    const [campaignRows, termRows, retRows, adRows, ageRows, genderRows, adGroupRows] = await Promise.all([
       gaqlSearch(
         token,
         `SELECT campaign.name, campaign.advertising_channel_type, segments.date,
@@ -157,6 +157,15 @@ async function build(): Promise<GAdsResponse> {
         `SELECT campaign.advertising_channel_type, ad_group_criterion.gender.type,
                 metrics.impressions, metrics.clicks
          FROM gender_view WHERE ${CAMPAIGN_FILTER} AND ${range}`
+      ),
+      gaqlSearch(
+        token,
+        `SELECT campaign.name, ad_group.name, segments.date,
+                metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions,
+                metrics.video_trueview_views, metrics.video_quartile_p25_rate, metrics.video_quartile_p50_rate,
+                metrics.video_quartile_p75_rate, metrics.video_quartile_p100_rate
+         FROM ad_group
+         WHERE ${CAMPAIGN_FILTER} AND campaign.advertising_channel_type = 'VIDEO' AND ${range}`
       ),
     ]);
 
@@ -272,7 +281,28 @@ async function build(): Promise<GAdsResponse> {
       youtube: { age: toArr(demoAcc.youtube.age), gender: toArr(demoAcc.youtube.gender) },
     };
 
-    const body: GAdsResponse = { success: true, rows, searchTerms, videoRetention, youtubeCreatives, demographics, timestamp: new Date().toISOString() };
+    // YouTube ad groups per day. Quartile rates can't be summed across days, so
+    // carry rate × views and let the client divide by summed views.
+    const youtubeAdGroups: GAdsAdGroupRow[] = adGroupRows.map((r) => {
+      const m = r.metrics ?? {};
+      const views = num(m.videoTrueviewViews);
+      return {
+        date: r.segments?.date,
+        campaign: r.campaign?.name ?? "",
+        adGroup: r.adGroup?.name ?? "",
+        spend: +(num(m.costMicros) / 1e6).toFixed(2),
+        clicks: num(m.clicks),
+        impressions: num(m.impressions),
+        views,
+        conversions: num(m.conversions),
+        q25: num(m.videoQuartileP25Rate) * views,
+        q50: num(m.videoQuartileP50Rate) * views,
+        q75: num(m.videoQuartileP75Rate) * views,
+        q100: num(m.videoQuartileP100Rate) * views,
+      };
+    });
+
+    const body: GAdsResponse = { success: true, rows, searchTerms, videoRetention, youtubeCreatives, youtubeAdGroups, demographics, timestamp: new Date().toISOString() };
     cached = { at: Date.now(), body };
     return body;
   } catch (e) {

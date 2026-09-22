@@ -99,6 +99,31 @@ export function adBreakdown(rows: Row[]) {
     .sort((a, b) => b.totals.spend - a.totals.spend);
 }
 
+// Ad set ("conjunto") breakdown. Keyed by campaign + ad set, since the same
+// ad set name can live under more than one campaign. Each set inherits its
+// campaign's métrica mãe.
+export function adsetBreakdown(rows: Row[]) {
+  return groupSum(rows, (r) => `${r.campaign}||${r.adset}`)
+    .map((g, i) => {
+      const first = g.rows[0];
+      const objective = first?.objective ?? "";
+      return {
+        key: g.key,
+        adset: first?.adset ?? "",
+        campaign: first?.campaign ?? "",
+        objective,
+        color: OBJECTIVE_COLOR[objective] ?? SERIES[i % SERIES.length],
+        ads: new Set(g.rows.map((r) => r.ad)).size,
+        totals: g.totals,
+        derived: derive(g.totals),
+        primary: primaryDef(objective),
+        primaryValue: primaryResult(objective, g.totals),
+        costPerResult: costPerPrimary(objective, g.totals),
+      };
+    })
+    .sort((a, b) => b.totals.spend - a.totals.spend);
+}
+
 export interface DailyPoint {
   date: string;
   spend: number;

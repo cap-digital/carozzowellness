@@ -20,7 +20,7 @@ import { Dropdown } from "@/components/ui/Dropdown";
 import { DataTable, Column } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { makeTooltip } from "@/components/charts/ChartTooltip";
-import { sum } from "@/lib/metrics";
+import { sum, derive } from "@/lib/metrics";
 import { objectiveBreakdown } from "@/lib/aggregate";
 import { gaByCampaign, gaSum, gaDerive, type GAdsCampaignStat } from "@/lib/googleAds";
 import { brl, int, pct, resultNum } from "@/lib/format";
@@ -47,6 +47,7 @@ export default function CampanhasPage() {
 function Campanhas() {
   const { rows, googleSearchRows, youtubeRows, platforms } = useData();
   const t = useMemo(() => sum(rows), [rows]);
+  const md = useMemo(() => derive(t), [t]);
   const objectives = useMemo(() => objectiveBreakdown(rows), [rows]);
   const googleCampaigns = useMemo(() => gaByCampaign(googleSearchRows), [googleSearchRows]);
   const youtubeCampaigns = useMemo(() => gaByCampaign(youtubeRows), [youtubeRows]);
@@ -187,8 +188,19 @@ function Campanhas() {
     { key: "cpc", header: "CPC", align: "right", render: (r) => brl(r.cpc), sortValue: (r) => r.cpc },
   ];
 
-  // Non-Meta platform summary strips (visible without switching tabs).
+  // Per-platform summary strips — the KPI cards above are cross-platform totals,
+  // so each channel gets its own line here, Meta first.
   const platformStrips = [
+    t.rows > 0 && {
+      label: "Meta Ads", tag: "Social", color: "#2f80c4", tagColor: "#1f5a8c",
+      stats: [
+        { l: "Investido", v: brl(t.spend, 0) },
+        { l: "Impressões", v: int(t.impressions) },
+        { l: "Cliques no link", v: int(t.linkClicks) },
+        { l: "CTR", v: pct(md.ctrLink) },
+        { l: "CPC", v: brl(md.cpcLink) },
+      ],
+    },
     gT.rows > 0 && {
       label: "Google Rede de Pesquisa", tag: "Search", color: "#e0a010", tagColor: "#8f6d29",
       stats: [
@@ -224,7 +236,7 @@ function Campanhas() {
         </div>
       </Reveal>
 
-      {/* Non-Meta platforms — visible without switching tabs */}
+      {/* Per-platform strips — visible without switching tabs */}
       {platformStrips.length > 0 && (
         <Reveal delay={30}>
           <div className="space-y-3">
