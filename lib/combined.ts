@@ -1,12 +1,11 @@
 // Cross-platform aggregation for the non-platform-specific pages (Visão Geral,
-// Campanhas, Custos). Combines Meta (edge) + Programática (edge) + Google Search
-// + YouTube (Ads API). Programática has no data yet → contributes zeros.
+// Campanhas, Custos). Combines Meta (edge) + Google Search + YouTube (Ads API).
 import type { Totals } from "./types";
 import { derive } from "./metrics";
 import { isValidDate } from "./format";
 import { gaSum, gaDerive, type GAdsRow } from "./googleAds";
 
-export type PlatformKey = "meta" | "google" | "youtube" | "programatica";
+export type PlatformKey = "meta" | "google" | "youtube";
 
 export interface PlatformAgg {
   key: PlatformKey;
@@ -27,10 +26,9 @@ export const PLATFORM_COLOR: Record<PlatformKey, string> = {
   meta: "#2f80c4",
   google: "#e0a010",
   youtube: "#cf3a5f",
-  programatica: "#8a63d4",
 };
 
-// Per-platform aggregates (always all four, in fixed order — zeros stay visible).
+// Per-platform aggregates (always all three, in fixed order — zeros stay visible).
 export function platformAggs(meta: Totals, search: GAdsRow[], youtube: GAdsRow[]): PlatformAgg[] {
   const md = derive(meta);
   const s = gaSum(search), sd = gaDerive(s);
@@ -39,7 +37,6 @@ export function platformAggs(meta: Totals, search: GAdsRow[], youtube: GAdsRow[]
     { key: "meta", label: "Meta Ads", color: PLATFORM_COLOR.meta, spend: meta.spend, impressions: meta.impressions, clicks: meta.linkClicks, ctr: md.ctrLink, cpc: md.cpcLink, cpm: md.cpm, views: 0, vtr: 0, cpv: 0 },
     { key: "google", label: "Google Pesquisa", color: PLATFORM_COLOR.google, spend: s.spend, impressions: s.impressions, clicks: s.clicks, ctr: sd.ctr, cpc: sd.cpc, cpm: sd.cpm, views: 0, vtr: 0, cpv: 0 },
     { key: "youtube", label: "YouTube", color: PLATFORM_COLOR.youtube, spend: y.spend, impressions: y.impressions, clicks: y.clicks, ctr: yd.ctr, cpc: yd.cpc, cpm: yd.cpm, views: y.views, vtr: yd.vtr, cpv: yd.cpv },
-    { key: "programatica", label: "Programática", color: PLATFORM_COLOR.programatica, spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0, cpm: 0, views: 0, vtr: 0, cpv: 0 },
   ];
 }
 

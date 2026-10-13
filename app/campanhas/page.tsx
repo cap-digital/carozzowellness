@@ -18,7 +18,6 @@ import { ChartCard, SectionTitle, Card } from "@/components/ui/Card";
 import { Funnel, FunnelStage } from "@/components/charts/Funnel";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { DataTable, Column } from "@/components/ui/DataTable";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { makeTooltip } from "@/components/charts/ChartTooltip";
 import { sum, derive } from "@/lib/metrics";
 import { objectiveBreakdown } from "@/lib/aggregate";
@@ -27,13 +26,11 @@ import { brl, int, pct, resultNum } from "@/lib/format";
 import { CHART } from "@/lib/theme";
 import { cn } from "@/lib/cn";
 import type { Totals } from "@/lib/types";
-import { Clock } from "lucide-react";
 
 const PLATFORM_TABS = [
   { key: "meta", label: "Meta Ads", color: "#2f80c4" },
   { key: "google", label: "Google", color: "#e0a010" },
   { key: "youtube", label: "YouTube", color: "#cf3a5f" },
-  { key: "programatica", label: "Programática", color: "#8a63d4" },
 ] as const;
 
 export default function CampanhasPage() {
@@ -45,7 +42,7 @@ export default function CampanhasPage() {
 }
 
 function Campanhas() {
-  const { rows, googleSearchRows, youtubeRows, platforms } = useData();
+  const { rows, googleSearchRows, youtubeRows } = useData();
   const t = useMemo(() => sum(rows), [rows]);
   const md = useMemo(() => derive(t), [t]);
   const objectives = useMemo(() => objectiveBreakdown(rows), [rows]);
@@ -121,9 +118,6 @@ function Campanhas() {
     ...objectives.map((o) => ({ value: o.key, label: o.key, color: o.color })),
   ];
 
-  // Platform availability (only Meta has data today)
-  const platformLive = (key: string) => (platforms as any)[key] > 0;
-  const activePlatform = PLATFORM_TABS.find((p) => p.key === platform)!;
 
   type ORow = (typeof objectives)[number];
   const cols: Column<ORow>[] = [
@@ -321,7 +315,6 @@ function Campanhas() {
           {/* Platform filter */}
           <div className="inline-flex flex-wrap items-center gap-0.5 rounded-full border border-[var(--border)] bg-[var(--surface-2)] p-0.5">
             {PLATFORM_TABS.map((p) => {
-              const live = platformLive(p.key);
               const active = platform === p.key;
               return (
                 <button
@@ -334,29 +327,21 @@ function Campanhas() {
                       : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
                   )}
                 >
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: live ? p.color : "#c3bfad" }} />
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: p.color }} />
                   {p.label}
-                  {!live && <span className="text-[9.5px] uppercase tracking-wide text-[var(--text-muted)]">breve</span>}
                 </button>
               );
             })}
           </div>
         </div>
 
-        <Card className={platform === "meta" || platform === "google" || platform === "youtube" ? "p-1.5" : ""}>
+        <Card className="p-1.5">
           {platform === "meta" ? (
             <DataTable columns={cols} data={objectives} rowKey={(r) => r.key} initialSort={{ key: "spend", dir: "desc" }} />
           ) : platform === "google" ? (
             <DataTable columns={campCols("#e0a010")} data={googleCampaigns} rowKey={(r) => r.campaign} initialSort={{ key: "spend", dir: "desc" }} />
-          ) : platform === "youtube" ? (
-            <DataTable columns={campCols("#cf3a5f")} data={youtubeCampaigns} rowKey={(r) => r.campaign} initialSort={{ key: "spend", dir: "desc" }} />
           ) : (
-            <EmptyState
-              icon={<Clock size={22} />}
-              color={activePlatform.color}
-              title={`${activePlatform.label} em breve`}
-              description={`Assim que a conta de ${activePlatform.label} for integrada, as campanhas e seus resultados aparecem aqui — no mesmo formato.`}
-            />
+            <DataTable columns={campCols("#cf3a5f")} data={youtubeCampaigns} rowKey={(r) => r.campaign} initialSort={{ key: "spend", dir: "desc" }} />
           )}
         </Card>
       </Reveal>

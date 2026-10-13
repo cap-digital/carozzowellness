@@ -84,5 +84,4 @@ export const PLATFORMS = {
   meta: { label: "Meta Ads", color: "#2f80c4", key: "meta" as const },
   google: { label: "Google Pesquisa", color: "#e0a010", key: "google" as const },
   youtube: { label: "YouTube", color: "#cf3a5f", key: "youtube" as const },
-  programatica: { label: "Programática", color: "#8a63d4", key: "programatica" as const },
 };

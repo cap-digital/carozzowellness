@@ -25,7 +25,7 @@ Todas as rotas são reais (App Router), então F5 em qualquer página funciona s
 ## Estrutura
 
 - `app/` — rotas (uma pasta por página)
-  - `/` Visão geral · `/plataformas/{meta,google,youtube,programatica}` ·
+  - `/` Visão geral · `/plataformas/{meta,google,youtube}` ·
     `/criativos` · `/publico` · `/campanhas` · `/custos`
   - `app/api/meta/route.ts` — proxy server-side da função Supabase (esconde a key,
     cacheia a resposta). Único ponto que fala com a fonte de dados.
@@ -38,7 +38,7 @@ Todas as rotas são reais (App Router), então F5 em qualquer página funciona s
 ## Fonte de dados
 
 Função Supabase `CarozzoWellness` (POST). Retorna `meta[]` (1.272 linhas,
-Facebook/Instagram) e arrays vazios para `google`, `youtube`, `programatica` —
+Facebook/Instagram) e arrays vazios para `google`, `youtube`, `programatica` (não exibida) —
 essas plataformas ainda não têm dados e aparecem como "Em breve".
 
 ## Custos e taxas

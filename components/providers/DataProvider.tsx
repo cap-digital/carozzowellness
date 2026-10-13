@@ -42,7 +42,7 @@ interface Ctx {
   customRange: CustomRange | null;
   applyCustomRange: (start: string, end: string) => void; // sets range to "custom"
   updatedAt: string | null;
-  platforms: { meta: number; google: number; youtube: number; programatica: number };
+  platforms: { meta: number; google: number; youtube: number };
   refresh: () => void;
 }
 
@@ -81,8 +81,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     // "Atualizar" click asks the routes to go back to the source.
     const qs = nonce > 0 ? "?refresh=1" : "";
 
-    // Meta + Programática (edge) — required. Gates the page skeleton so the
-    // dashboard renders as soon as Meta is ready, without waiting on Google Ads.
+    // Meta (edge) — required. Gates the page skeleton so the dashboard renders
+    // as soon as Meta is ready, without waiting on Google Ads.
     fetch(`/api/meta${qs}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((meta: MetaCompact) => {
@@ -174,7 +174,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       meta: raw?.rows.length ?? 0,
       google: gadsRows.filter((r) => r.channel === "search").length,
       youtube: gadsRows.filter((r) => r.channel === "youtube").length,
-      programatica: raw?.programatica ?? 0,
     },
     refresh: () => setNonce((n) => n + 1),
   };

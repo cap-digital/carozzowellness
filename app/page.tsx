@@ -76,13 +76,13 @@ function Overview() {
   const objectives = useMemo(() => objectiveBreakdown(rows), [rows]);
   const convStats = useMemo(() => conversionStats(rows), [rows]);
 
-  // Cross-platform: Meta + Programática + Google Search + YouTube
+  // Cross-platform: Meta + Google Search + YouTube
   const aggs = useMemo(() => platformAggs(t, googleSearchRows, youtubeRows), [t, googleSearchRows, youtubeRows]);
   const gSearch = useMemo(() => gaSum(googleSearchRows), [googleSearchRows]);
   const yt = useMemo(() => gaSum(youtubeRows), [youtubeRows]);
   const combined = combinedTotals(aggs);
   const totalSpend = combined.spend;
-  const platforms = aggs; // Meta, Google, YouTube, Programática (zeros)
+  const platforms = aggs; // Meta, Google, YouTube
 
   // Combined daily spend across all platforms.
   const cumulative = useMemo(() => {
@@ -209,7 +209,7 @@ function Overview() {
       {/* Per-platform summary */}
       <Reveal delay={40}>
         <SectionTitle hint="investimento e entrega por canal">Por plataforma</SectionTitle>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {platforms.map((p) => {
             const empty = p.spend === 0 && p.impressions === 0;
             return (
