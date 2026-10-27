@@ -151,7 +151,9 @@ function Google() {
                 <Bar yAxisId="left" isAnimationActive={false} dataKey="impressions" fill={GOLD} radius={[4, 4, 0, 0]} maxBarSize={34}>
                   <LabelList dataKey="impressions" content={capLabel({ count: daily.length, format: compact })} />
                 </Bar>
-                <Line yAxisId="right" isAnimationActive={false} type="monotone" dataKey="clicks" stroke={BLUE} strokeWidth={2.5} dot={false} activeDot={{ r: 4, fill: BLUE, stroke: "var(--surface-1)", strokeWidth: 2 }} />
+                <Line yAxisId="right" isAnimationActive={false} type="monotone" dataKey="clicks" stroke={BLUE} strokeWidth={2.5} dot={false} activeDot={{ r: 4, fill: BLUE, stroke: "var(--surface-1)", strokeWidth: 2 }}>
+                  <LabelList dataKey="clicks" content={capLabel({ count: daily.length, phase: 0.5, dy: -9, fill: BLUE, format: int })} />
+                </Line>
               </ComposedChart>
             </ResponsiveContainer>
           </div>

@@ -193,7 +193,9 @@ function Youtube() {
                   <Bar yAxisId="left" isAnimationActive={false} dataKey="impressions" fill={WINE} radius={[4, 4, 0, 0]} maxBarSize={30}>
                     <LabelList dataKey="impressions" content={capLabel({ count: daily.length, format: compact })} />
                   </Bar>
-                  <Line yAxisId="right" isAnimationActive={false} type="monotone" dataKey="views" stroke={TEAL} strokeWidth={2.5} dot={false} activeDot={{ r: 4, fill: TEAL, stroke: "var(--surface-1)", strokeWidth: 2 }} />
+                  <Line yAxisId="right" isAnimationActive={false} type="monotone" dataKey="views" stroke={TEAL} strokeWidth={2.5} dot={false} activeDot={{ r: 4, fill: TEAL, stroke: "var(--surface-1)", strokeWidth: 2 }}>
+                    <LabelList dataKey="views" content={capLabel({ count: daily.length, phase: 0.5, dy: -9, format: compact })} />
+                  </Line>
                 </ComposedChart>
               </ResponsiveContainer>
             </div>

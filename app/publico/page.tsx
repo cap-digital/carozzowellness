@@ -267,12 +267,12 @@ function Publico() {
                   </ChartCard>
 
                   <ChartCard title="Conversões por faixa etária" subtitle="Meta · WhatsApp, Leads LP e Leads Formulário" accent="#cf3a5f">
-                    <div style={{ height: 220 }}>
+                    <div style={{ height: 320 }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart
                           layout="vertical"
                           data={ageStats.map((a) => ({ name: a.age, conversations: a.t.conversations, whatsapp: a.t.whatsapp, leadGrouped: a.t.leadGrouped, leadSite: a.t.leadSite }))}
-                          margin={{ top: 4, right: 24, left: 4, bottom: 0 }}
+                          margin={{ top: 4, right: 36, left: 4, bottom: 0 }}
                           barCategoryGap="22%"
                         >
                           <CartesianGrid horizontal={false} stroke={CHART.grid} />
@@ -280,7 +280,14 @@ function Publico() {
                           <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: CHART.textSecondary }} tickLine={false} axisLine={false} width={44} />
                           <Tooltip cursor={{ fill: "rgba(70,89,7,0.06)" }} content={makeTooltip((n, v) => { const m = convByKey[n]; return m ? { label: m.label, value: int(v), color: m.color } : null; })} />
                           {CONVERSION_METRICS.map((m) => (
-                            <Bar key={m.key} isAnimationActive={false} dataKey={m.key} fill={m.color} radius={[0, 3, 3, 0]} maxBarSize={9} />
+                            <Bar key={m.key} isAnimationActive={false} dataKey={m.key} fill={m.color} radius={[0, 3, 3, 0]} maxBarSize={9}>
+                              <LabelList
+                                dataKey={m.key}
+                                position="right"
+                                formatter={(v: any) => (Number(v) > 0 ? int(Number(v)) : "")}
+                                style={{ fontSize: 9, fill: CHART.textSecondary, fontWeight: 600 }}
+                              />
+                            </Bar>
                           ))}
                         </BarChart>
                       </ResponsiveContainer>

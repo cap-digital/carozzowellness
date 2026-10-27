@@ -26,10 +26,10 @@ export function stride(count: number, maxLabels = 12) {
  * on top of the previous kept label, which is what happens whenever the series
  * length isn't a clean multiple of the stride.
  */
-function keptIndices(count: number, maxLabels: number) {
+function keptIndices(count: number, maxLabels: number, phase = 0) {
   const step = stride(count, maxLabels);
   const keep = new Set<number>();
-  for (let i = 0; i < count; i += step) keep.add(i);
+  for (let i = step > 1 ? Math.round(step * phase) : 0; i < count; i += step) keep.add(i);
   const last = count - 1;
   if (last >= 0 && !keep.has(last) && last - Math.max(...keep) >= Math.ceil(step / 2)) keep.add(last);
   return keep;
@@ -58,19 +58,25 @@ export function capLabel({
   maxLabels = 12,
   dy = -6,
   fill = CHART.textSecondary,
+  phase = 0,
+  skip,
 }: {
   format: (v: number) => string;
   count: number;
   maxLabels?: number;
   dy?: number;
   fill?: string;
+  /** 0..1 — shift which points get labels; 0.5 interleaves with another series. */
+  phase?: number;
+  /** Drop specific points, e.g. one that duplicates another series' label. */
+  skip?: (index: number) => boolean;
 }) {
-  const keep = keptIndices(count, maxLabels);
+  const keep = keptIndices(count, maxLabels, phase);
   const Comp = (raw: unknown) => {
     const p = raw as LabelProps;
     const i = num(p.index, -1);
     const v = num(p.value);
-    if (i < 0 || !keep.has(i) || v === 0) return null;
+    if (i < 0 || !keep.has(i) || v === 0 || skip?.(i)) return null;
     // The end labels hug the plot edges, so they anchor inward instead of
     // centering — otherwise the first and last values get cut off.
     const edge = i === 0 ? "start" : i === count - 1 ? "end" : "middle";
@@ -100,48 +106,67 @@ export function capLabel({
 }
 
 /**
- * Label inside a STACKED segment. An interior segment has no free end, so the
- * label only renders when the text actually fits with padding — otherwise the
- * legend and tooltip carry that value instead of a clipped number.
+ * Label inside a STACKED segment — on EVERY column, not thinned.
+ * The text shrinks to fit the segment; when the column is too narrow for even
+ * a small horizontal label, it turns vertical (columns are taller than they are
+ * wide). Only a segment too small for any legible label (< 6.5px type) is left
+ * to the legend and tooltip — never a clipped number.
  */
 export function segmentLabel({
   format,
-  count,
   fill,
-  maxLabels = 12,
-  minHeight = 13,
+  maxFont = 9.5,
+  minFont = 6.5,
 }: {
   format: (v: number, index: number) => string | null;
-  count: number;
   fill: string; // the segment's own color — decides black vs white text
-  maxLabels?: number;
-  minHeight?: number;
+  maxFont?: number;
+  minFont?: number;
+  /** kept for call-site compatibility; segments are never thinned */
+  count?: number;
 }) {
-  const keep = keptIndices(count, maxLabels);
   const ink = readableInk(fill);
+  const RATIO = CHAR_W / FONT; // glyph width per px of font size
   const Comp = (raw: unknown) => {
     const p = raw as LabelProps;
     const i = num(p.index, -1);
     const h = num(p.height);
     const w = num(p.width);
-    if (i < 0 || !keep.has(i) || h < minHeight) return null;
+    if (i < 0 || h <= 0 || w <= 0) return null;
     const text = format(num(p.value), i);
     if (!text) return null;
-    if (text.length * CHAR_W + 6 > w) return null; // would be clipped → skip
-    return (
-      <text
-        x={num(p.x) + w / 2}
-        y={num(p.y) + h / 2}
-        textAnchor="middle"
-        dominantBaseline="central"
-        fontSize={9.5}
-        fontWeight={700}
-        fill={ink}
-        style={{ pointerEvents: "none" }}
-      >
-        {text}
-      </text>
-    );
+    const cx = num(p.x) + w / 2;
+    const cy = num(p.y) + h / 2;
+
+    // Horizontal first: as large as the width allows, capped at maxFont.
+    const fitW = Math.min(maxFont, (w - 3) / (text.length * RATIO));
+    if (fitW >= minFont && h >= fitW + 2) {
+      return (
+        <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" fontSize={fitW} fontWeight={700} fill={ink} style={{ pointerEvents: "none" }}>
+          {text}
+        </text>
+      );
+    }
+    // Vertical fallback: the text runs along the column's height.
+    const fitH = Math.min(maxFont, (h - 3) / (text.length * RATIO));
+    if (fitH >= minFont && w >= fitH + 1) {
+      return (
+        <text
+          x={cx}
+          y={cy}
+          transform={`rotate(-90 ${cx} ${cy})`}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fontSize={fitH}
+          fontWeight={700}
+          fill={ink}
+          style={{ pointerEvents: "none" }}
+        >
+          {text}
+        </text>
+      );
+    }
+    return null;
   };
   Comp.displayName = "SegmentLabel";
   return Comp;

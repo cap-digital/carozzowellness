@@ -283,13 +283,19 @@ function Overview() {
                     <LabelList dataKey="spend" content={capLabel({ count: cumulative.length, format: (v) => brl(v, 0) })} />
                   </Bar>
                   <Line
+                    isAnimationActive={false}
                     type="monotone"
                     dataKey="cum"
                     stroke="#b08a3e"
                     strokeWidth={2.5}
                     dot={false}
                     activeDot={{ r: 4, fill: "#b08a3e", stroke: "var(--surface-1)", strokeWidth: 2 }}
-                  />
+                  >
+                    <LabelList
+                      dataKey="cum"
+                      content={capLabel({ count: cumulative.length, phase: 0.5, dy: -9, skip: (i) => i === 0, format: (v) => compactBRL(v) })}
+                    />
+                  </Line>
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -455,7 +461,9 @@ function Overview() {
                   strokeWidth={2.5}
                   fill="url(#gMetricA)"
                   dot={false}
-                />
+                >
+                  <LabelList dataKey={mA.key} content={capLabel({ count: daily.length, format: axisFmt(mA) })} />
+                </Area>
                 {!sameMetric && (
                   <Line
                     isAnimationActive={false}
@@ -466,7 +474,9 @@ function Overview() {
                     strokeWidth={2.5}
                     dot={false}
                     activeDot={{ r: 4, fill: mB.color, stroke: "var(--surface-1)", strokeWidth: 2 }}
-                  />
+                  >
+                    <LabelList dataKey={mB.key} content={capLabel({ count: daily.length, phase: 0.5, format: axisFmt(mB) })} />
+                  </Line>
                 )}
               </ComposedChart>
             </ResponsiveContainer>

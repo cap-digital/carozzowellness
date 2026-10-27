@@ -26,6 +26,7 @@ import { PlatformFilter, type FilterKey } from "@/components/ui/PlatformFilter";
 import { Funnel } from "@/components/charts/Funnel";
 import { gaSum, gaDerive, type GAdsCreative } from "@/lib/googleAds";
 import { makeTooltip, TipShell } from "@/components/charts/ChartTooltip";
+import { capLabel } from "@/components/charts/labels";
 import { sum } from "@/lib/metrics";
 import { adBreakdown, formatBreakdown } from "@/lib/aggregate";
 import { brl, int, pct, compact, resultNum } from "@/lib/format";
@@ -238,7 +239,9 @@ function Criativos() {
                   <XAxis dataKey="depth" tick={{ fontSize: 11, fill: CHART.textMuted }} tickLine={false} axisLine={{ stroke: CHART.axis }} />
                   <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11, fill: CHART.textMuted }} tickLine={false} axisLine={false} width={38} domain={[0, 100]} />
                   <Tooltip content={makeTooltip((_n, v) => ({ label: "Retenção", value: pct(v, 1), color: "#cf3a5f" }))} />
-                  <Area isAnimationActive={false} type="monotone" dataKey="value" stroke="#cf3a5f" strokeWidth={2.5} fill="url(#ret)" dot={{ r: 3, fill: "#cf3a5f", stroke: "var(--surface-1)", strokeWidth: 2 }} />
+                  <Area isAnimationActive={false} type="monotone" dataKey="value" stroke="#cf3a5f" strokeWidth={2.5} fill="url(#ret)" dot={{ r: 3, fill: "#cf3a5f", stroke: "var(--surface-1)", strokeWidth: 2 }}>
+                    <LabelList dataKey="value" content={capLabel({ count: retention.length, format: (v) => pct(v, 1) })} />
+                  </Area>
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -282,6 +285,13 @@ function Criativos() {
                   {scatter.map((s, i) => (
                     <Cell key={i} fill={s.color} fillOpacity={0.72} stroke={s.color} />
                   ))}
+                  <LabelList
+                    dataKey="name"
+                    position="top"
+                    offset={8}
+                    formatter={(v: any) => String(v ?? "").split(" - ")[0]}
+                    style={{ fontSize: 10, fill: CHART.textSecondary, fontWeight: 600, stroke: CHART.surface, strokeWidth: 3, paintOrder: "stroke" }}
+                  />
                 </Scatter>
               </ScatterChart>
             </ResponsiveContainer>
@@ -351,7 +361,9 @@ function Criativos() {
                         <XAxis dataKey="depth" tick={{ fontSize: 11, fill: CHART.textMuted }} tickLine={false} axisLine={{ stroke: CHART.axis }} />
                         <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11, fill: CHART.textMuted }} tickLine={false} axisLine={false} width={38} domain={[0, 100]} />
                         <Tooltip content={makeTooltip((_n, v) => ({ label: "Retenção", value: pct(v, 1), color: "#14a58c" }))} />
-                        <Area isAnimationActive={false} type="monotone" dataKey="value" stroke="#14a58c" strokeWidth={2.5} fill="url(#crRet)" dot={{ r: 3, fill: "#14a58c", stroke: "var(--surface-1)", strokeWidth: 2 }} />
+                        <Area isAnimationActive={false} type="monotone" dataKey="value" stroke="#14a58c" strokeWidth={2.5} fill="url(#crRet)" dot={{ r: 3, fill: "#14a58c", stroke: "var(--surface-1)", strokeWidth: 2 }}>
+                          <LabelList dataKey="value" content={capLabel({ count: ytRetention.length, format: (v) => pct(v, 1) })} />
+                        </Area>
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
