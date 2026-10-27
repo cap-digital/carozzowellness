@@ -26,6 +26,7 @@ import { gaSum, gaDerive } from "@/lib/googleAds";
 import { PlatformFilter, type FilterKey } from "@/components/ui/PlatformFilter";
 import { brl, int, pct, dec, compactBRL, shortDate } from "@/lib/format";
 import { CHART } from "@/lib/theme";
+import { capLabel } from "@/components/charts/labels";
 
 export default function CustosPage() {
   return (
@@ -325,7 +326,9 @@ function Custos() {
                   <XAxis dataKey="date" tickFormatter={shortDate} tick={{ fontSize: 11, fill: CHART.textMuted }} tickLine={false} axisLine={{ stroke: CHART.axis }} />
                   <YAxis tickFormatter={axisKind(tm.kind)} tick={{ fontSize: 11, fill: CHART.textMuted }} tickLine={false} axisLine={false} width={56} />
                   <Tooltip content={trendTip} />
-                  <Area isAnimationActive={false} type="monotone" dataKey={tm.key} stroke={tm.color} strokeWidth={2.5} fill="url(#gRate)" dot={{ r: 2.5, fill: tm.color, stroke: "var(--surface-1)", strokeWidth: 1.5 }} />
+                  <Area isAnimationActive={false} type="monotone" dataKey={tm.key} stroke={tm.color} strokeWidth={2.5} fill="url(#gRate)" dot={{ r: 2.5, fill: tm.color, stroke: "var(--surface-1)", strokeWidth: 1.5 }}>
+                    <LabelList dataKey={tm.key} content={capLabel({ count: dailyRates.length, format: (v) => fmtKind(tm.kind, v) })} />
+                  </Area>
                 </AreaChart>
               </ResponsiveContainer>
             </div>

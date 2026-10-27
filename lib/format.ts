@@ -41,6 +41,20 @@ export const compactBRL = (n: number) => {
 // A valid yyyy-mm-dd date (the source occasionally returns empty/invalid dates).
 export const isValidDate = (d: unknown): d is string => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d);
 
+// Today / day arithmetic in the VIEWER's local calendar (America/Sao_Paulo for
+// this client), which is the same calendar the sheet's dates are written in.
+// Built from the local date parts on purpose: toISOString() would shift to UTC
+// and, after 21:00 BRT, report tomorrow.
+export const todayIso = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+export const shiftIso = (iso: string, days: number) => {
+  const [y, m, d] = iso.split("-").map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d));
+  t.setUTCDate(t.getUTCDate() + days);
+  return t.toISOString().slice(0, 10);
+};
+
 // yyyy-mm-dd -> "13 jul" (defensive: never renders "NaN undefined" for bad input)
 const MES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 export const shortDate = (iso: string) => {

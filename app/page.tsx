@@ -22,6 +22,7 @@ import { Kpi } from "@/components/ui/Kpi";
 import { Donut } from "@/components/charts/Donut";
 import { Funnel } from "@/components/charts/Funnel";
 import { Dropdown } from "@/components/ui/Dropdown";
+import { capLabel } from "@/components/charts/labels";
 import { makeTooltip, TipShell } from "@/components/charts/ChartTooltip";
 import { sum, derive } from "@/lib/metrics";
 import { dailySeries, objectiveBreakdown, conversionStats } from "@/lib/aggregate";
@@ -278,7 +279,9 @@ function Overview() {
                     width={64}
                   />
                   <Tooltip content={spendLineTip} cursor={{ fill: "rgba(70,89,7,0.06)" }} />
-                  <Bar isAnimationActive={false} dataKey="spend" fill="#7c9440" radius={[4, 4, 0, 0]} maxBarSize={26} />
+                  <Bar isAnimationActive={false} dataKey="spend" fill="#7c9440" radius={[4, 4, 0, 0]} maxBarSize={26}>
+                    <LabelList dataKey="spend" content={capLabel({ count: cumulative.length, format: (v) => brl(v, 0) })} />
+                  </Bar>
                   <Line
                     type="monotone"
                     dataKey="cum"

@@ -12,6 +12,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  LabelList,
 } from "recharts";
 import { useData } from "@/components/providers/DataProvider";
 import { Loadable, Reveal } from "@/components/ui/Loadable";
@@ -25,6 +26,7 @@ import { Dropdown } from "@/components/ui/Dropdown";
 import { SegmentName } from "@/components/ui/SegmentName";
 import { Donut } from "@/components/charts/Donut";
 import { makeTooltip, TipShell } from "@/components/charts/ChartTooltip";
+import { capLabel } from "@/components/charts/labels";
 import { gaSum, gaDerive, gaDaily, gaByAdGroup, type GAdsAdGroupRow, type GAdsAdGroupStat } from "@/lib/googleAds";
 import { brl, int, pct, compact, shortDate } from "@/lib/format";
 import { CHART } from "@/lib/theme";
@@ -162,7 +164,9 @@ function Youtube() {
                     <XAxis dataKey="depth" tick={{ fontSize: 11, fill: CHART.textMuted }} tickLine={false} axisLine={{ stroke: CHART.axis }} />
                     <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11, fill: CHART.textMuted }} tickLine={false} axisLine={false} width={38} domain={[0, 100]} />
                     <Tooltip content={makeTooltip((_n, v) => ({ label: "Retenção", value: pct(v, 1), color: TEAL }))} />
-                    <Area isAnimationActive={false} type="monotone" dataKey="value" stroke={TEAL} strokeWidth={2.5} fill="url(#ytRet)" dot={{ r: 3, fill: TEAL, stroke: "var(--surface-1)", strokeWidth: 2 }} />
+                    <Area isAnimationActive={false} type="monotone" dataKey="value" stroke={TEAL} strokeWidth={2.5} fill="url(#ytRet)" dot={{ r: 3, fill: TEAL, stroke: "var(--surface-1)", strokeWidth: 2 }}>
+                      <LabelList dataKey="value" content={capLabel({ count: retention.length, format: (v) => pct(v, 1) })} />
+                    </Area>
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -186,7 +190,9 @@ function Youtube() {
                   <YAxis yAxisId="left" tickFormatter={compact} tick={{ fontSize: 11, fill: WINE }} tickLine={false} axisLine={false} width={44} />
                   <YAxis yAxisId="right" orientation="right" tickFormatter={compact} tick={{ fontSize: 11, fill: TEAL }} tickLine={false} axisLine={false} width={44} />
                   <Tooltip content={dailyTip} cursor={{ fill: "rgba(70,89,7,0.06)" }} />
-                  <Bar yAxisId="left" isAnimationActive={false} dataKey="impressions" fill={WINE} radius={[4, 4, 0, 0]} maxBarSize={30} />
+                  <Bar yAxisId="left" isAnimationActive={false} dataKey="impressions" fill={WINE} radius={[4, 4, 0, 0]} maxBarSize={30}>
+                    <LabelList dataKey="impressions" content={capLabel({ count: daily.length, format: compact })} />
+                  </Bar>
                   <Line yAxisId="right" isAnimationActive={false} type="monotone" dataKey="views" stroke={TEAL} strokeWidth={2.5} dot={false} activeDot={{ r: 4, fill: TEAL, stroke: "var(--surface-1)", strokeWidth: 2 }} />
                 </ComposedChart>
               </ResponsiveContainer>

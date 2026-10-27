@@ -26,6 +26,7 @@ import { CreativeThumb } from "@/components/ui/CreativeThumb";
 import { MultiDropdown } from "@/components/ui/MultiDropdown";
 import { SegmentName } from "@/components/ui/SegmentName";
 import { makeTooltip } from "@/components/charts/ChartTooltip";
+import { capLabel, segmentLabel, sharePct } from "@/components/charts/labels";
 import { sum, derive, groupSum, byDate, CONVERSION_METRICS, CONVERSION_OBJECTIVE } from "@/lib/metrics";
 import { objectiveBreakdown, placementBreakdown, adBreakdown, adsetBreakdown } from "@/lib/aggregate";
 import { brl, dec, int, pct, compact, compactBRL, resultNum, shortDate } from "@/lib/format";
@@ -57,9 +58,17 @@ function Meta() {
       for (const k of objKeys) rec[k] = 0;
       for (const r of g.rows) rec[r.objective] = (rec[r.objective] as number) + r.spend;
       for (const k of objKeys) rec[k] = +(rec[k] as number).toFixed(2);
+      rec.total = +objKeys.reduce((a, k) => a + (rec[k] as number), 0).toFixed(2);
       return rec;
     });
   }, [rows, objKeys]);
+
+  // Period share per objective — printed in the legend so the weight of each
+  // campaign reads without hovering a single column.
+  const objShare = useMemo(() => {
+    const total = objectives.reduce((a, o) => a + o.totals.spend, 0);
+    return Object.fromEntries(objectives.map((o) => [o.key, total > 0 ? (o.totals.spend / total) * 100 : 0]));
+  }, [objectives]);
 
   // Top 3 creatives by investment
   const top3 = useMemo(() => adBreakdown(rows).slice(0, 3), [rows]);
@@ -81,15 +90,25 @@ function Meta() {
   );
 
   const stackTip = makeTooltip(
-    (name, value) => (value > 0 ? { label: name, value: brl(value), color: OBJECTIVE_COLOR[name] ?? "#888" } : null),
+    (name, value, row) => {
+      if (value <= 0) return null;
+      const total = Number(row?.total) || 0;
+      return {
+        label: name,
+        value: `${brl(value)} · ${sharePct(value, total, 1)}`,
+        color: OBJECTIVE_COLOR[name] ?? "#888",
+      };
+    },
     (label) => shortDate(String(label))
   );
 
   const convLabel = Object.fromEntries(CONVERSION_METRICS.map((m) => [m.key, m]));
   const convTip = makeTooltip(
-    (name, value) => {
+    (name, value, row) => {
       const m = convLabel[name];
-      return m ? { label: m.label, value: int(value), color: m.color } : null;
+      if (!m) return null;
+      const total = CONVERSION_METRICS.reduce((a, c) => a + (Number(row?.[c.key]) || 0), 0);
+      return { label: m.label, value: `${int(value)} · ${sharePct(value, total, 1)}`, color: m.color };
     },
     (label) => shortDate(String(label))
   );
@@ -190,7 +209,7 @@ function Meta() {
       <Reveal delay={80}>
         <ChartCard
           title="Evolução das conversões por tipo"
-          subtitle="WhatsApp, Leads LP e Leads Formulário — cada linha é uma ação, dia a dia"
+          subtitle="Cada linha é uma ação, dia a dia · total da ação no período ao lado da legenda"
           accent="#5a8f22"
         >
           <div style={{ height: 288 }}>
@@ -223,18 +242,26 @@ function Meta() {
                     strokeWidth={2.5}
                     dot={false}
                     activeDot={{ r: 4, fill: m.color, stroke: "var(--surface-1)", strokeWidth: 2 }}
-                  />
+                  >
+                    <LabelList dataKey={m.key} content={capLabel({ count: convDaily.length, format: (v) => int(v) })} />
+                  </Line>
                 ))}
               </LineChart>
             </ResponsiveContainer>
           </div>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 px-1 text-[11.5px] text-[var(--text-secondary)]">
-            {CONVERSION_METRICS.map((m) => (
-              <span key={m.key} className="flex items-center gap-1.5">
-                <span className="h-[3px] w-3.5 rounded-full" style={{ background: m.color }} />
-                {m.label}
-              </span>
-            ))}
+            {CONVERSION_METRICS.map((m) => {
+              const tot = convDaily.reduce((a, r) => a + (Number(r[m.key]) || 0), 0);
+              const all = CONVERSION_METRICS.reduce((a, c) => a + convDaily.reduce((x, r) => x + (Number(r[c.key]) || 0), 0), 0);
+              return (
+                <span key={m.key} className="flex items-center gap-1.5">
+                  <span className="h-[3px] w-3.5 rounded-full" style={{ background: m.color }} />
+                  {m.label}
+                  <span className="font-semibold tnum text-[var(--text-primary)]">{int(tot)}</span>
+                  <span className="tnum text-[var(--text-muted)]">{sharePct(tot, all, 1)}</span>
+                </span>
+              );
+            })}
           </div>
         </ChartCard>
       </Reveal>
@@ -244,7 +271,7 @@ function Meta() {
         <SectionTitle hint="composição diária do investimento">Investimento por objetivo</SectionTitle>
         <ChartCard
           title="Distribuição diária do gasto entre objetivos"
-          subtitle="Colunas empilhadas — cada cor é uma campanha"
+          subtitle="Colunas empilhadas — o rótulo é a participação da campanha no gasto do dia"
           accent="#2f80c4"
         >
           <div style={{ height: 280 }}>
@@ -255,7 +282,16 @@ function Meta() {
                 <YAxis tickFormatter={(v) => brl(v, 0)} tick={{ fontSize: 11, fill: CHART.textMuted }} tickLine={false} axisLine={false} width={54} />
                 <Tooltip content={stackTip} cursor={{ fill: "rgba(70,89,7,0.06)" }} />
                 {objKeys.map((k, i) => (
-                  <Bar key={k} isAnimationActive={false} dataKey={k} stackId="s" fill={OBJECTIVE_COLOR[k] ?? "#888"} maxBarSize={40} radius={i === objKeys.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]} />
+                  <Bar key={k} isAnimationActive={false} dataKey={k} stackId="s" fill={OBJECTIVE_COLOR[k] ?? "#888"} maxBarSize={40} radius={i === objKeys.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}>
+                    <LabelList
+                      dataKey={k}
+                      content={segmentLabel({
+                        count: stacked.length,
+                        fill: OBJECTIVE_COLOR[k] ?? "#888",
+                        format: (v, idx) => sharePct(v, Number(stacked[idx]?.total) || 0),
+                      })}
+                    />
+                  </Bar>
                 ))}
               </BarChart>
             </ResponsiveContainer>
@@ -265,6 +301,7 @@ function Meta() {
               <span key={k} className="flex items-center gap-1.5">
                 <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: OBJECTIVE_COLOR[k] ?? "#888" }} />
                 {k}
+                <span className="font-semibold tnum text-[var(--text-primary)]">{pct(objShare[k] ?? 0, 1)}</span>
               </span>
             ))}
           </div>

@@ -20,6 +20,7 @@ import { DataTable, Column } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageSkeleton } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/Badge";
+import { capLabel } from "@/components/charts/labels";
 import { makeTooltip, TipShell } from "@/components/charts/ChartTooltip";
 import { gaSum, gaDerive, gaDaily, gaTerms } from "@/lib/googleAds";
 import { brl, int, pct, compact, shortDate } from "@/lib/format";
@@ -147,7 +148,9 @@ function Google() {
                 <YAxis yAxisId="left" tickFormatter={compact} tick={{ fontSize: 11, fill: GOLD }} tickLine={false} axisLine={false} width={44} />
                 <YAxis yAxisId="right" orientation="right" tickFormatter={int} tick={{ fontSize: 11, fill: BLUE }} tickLine={false} axisLine={false} width={40} />
                 <Tooltip content={dailyTip} cursor={{ fill: "rgba(70,89,7,0.06)" }} />
-                <Bar yAxisId="left" isAnimationActive={false} dataKey="impressions" fill={GOLD} radius={[4, 4, 0, 0]} maxBarSize={34} />
+                <Bar yAxisId="left" isAnimationActive={false} dataKey="impressions" fill={GOLD} radius={[4, 4, 0, 0]} maxBarSize={34}>
+                  <LabelList dataKey="impressions" content={capLabel({ count: daily.length, format: compact })} />
+                </Bar>
                 <Line yAxisId="right" isAnimationActive={false} type="monotone" dataKey="clicks" stroke={BLUE} strokeWidth={2.5} dot={false} activeDot={{ r: 4, fill: BLUE, stroke: "var(--surface-1)", strokeWidth: 2 }} />
               </ComposedChart>
             </ResponsiveContainer>

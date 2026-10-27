@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { Row } from "@/lib/types";
 import { uniqueDates } from "@/lib/metrics";
+import { shiftIso, todayIso } from "@/lib/format";
 import { expandMeta, type MetaCompact } from "@/lib/compact";
 import { gaUniqueDates, type GAdsAdGroupRow, type GAdsCreative, type GAdsDemographics, type GAdsResponse, type GAdsRetention, type GAdsRow, type GAdsTermRow } from "@/lib/googleAds";
 
@@ -50,10 +51,17 @@ const DataCtx = createContext<Ctx | null>(null);
 
 const EMPTY_GADS: GAdsResponse = { success: false, rows: [], searchTerms: [] };
 
+// Presets are anchored to the CALENDAR, ending YESTERDAY — today is still
+// running, so its spend is partial and would drag every rate down. ("Ontem" on
+// 27/10 = 26/10; "Últimos 3 dias" = 24–26/10.)
+// Anchoring on the calendar rather than on "the last N dates present in the
+// data" also keeps the window right when a day has no delivery at all.
 function rangeDates(all: string[], range: RangeKey): string[] {
   if (range === "all" || all.length === 0) return all;
   const n = range === "7d" ? 7 : range === "3d" ? 3 : 1;
-  return all.slice(Math.max(0, all.length - n));
+  const end = shiftIso(todayIso(), -1);
+  const start = shiftIso(end, -(n - 1));
+  return all.filter((d) => d >= start && d <= end);
 }
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
