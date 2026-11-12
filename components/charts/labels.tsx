@@ -187,3 +187,65 @@ export function readableInk(hex: string) {
 /** Share of a total, as "12%" — the unit readers scan for weight. */
 export const sharePct = (v: number, total: number, digits = 0) =>
   total > 0 ? `${((v / total) * 100).toFixed(digits).replace(".", ",")}%` : "";
+
+/**
+ * Labels for a bubble (scatter) chart, placed WITHOUT overlap.
+ * Bubbles cluster (many small creatives sit near the origin), so each label
+ * tries above, right, left and below its bubble and takes the first slot that
+ * doesn't collide with a label already placed; if none is free it's dropped and
+ * the tooltip carries that bubble. Feed the data biggest-first so the bubbles
+ * that matter most claim their slots first.
+ *
+ * Recharts calls the renderer once per point, in data order, on every render:
+ * index 0 resets the placement memory.
+ */
+export function bubbleLabel(format: (v: unknown) => string) {
+  let placed: { x0: number; y0: number; x1: number; y1: number }[] = [];
+  const H = 11;
+  const Comp = (raw: unknown) => {
+    const p = raw as LabelProps & { value?: unknown };
+    const i = num(p.index, -1);
+    if (i === 0) placed = [];
+    const text = format(p.value);
+    if (i < 0 || !text) return null;
+    const w = num(p.width);
+    const h = num(p.height);
+    const cx = num(p.x) + w / 2;
+    const cy = num(p.y) + h / 2;
+    const r = Math.max(w, h) / 2;
+    const tw = text.length * CHAR_W;
+    const gap = 3;
+    // Candidate boxes: [left, top] of the label for each side of the bubble.
+    const slots: [number, number][] = [
+      [cx - tw / 2, cy - r - gap - H], // above
+      [cx + r + gap, cy - H / 2], // right
+      [cx - r - gap - tw, cy - H / 2], // left
+      [cx - tw / 2, cy + r + gap], // below
+    ];
+    for (const [x0, y0] of slots) {
+      if (x0 < 0 || y0 < 0) continue;
+      const box = { x0, y0, x1: x0 + tw, y1: y0 + H };
+      const hit = placed.some((b) => box.x0 < b.x1 + 2 && box.x1 + 2 > b.x0 && box.y0 < b.y1 + 1 && box.y1 + 1 > b.y0);
+      if (hit) continue;
+      placed.push(box);
+      return (
+        <text
+          x={x0}
+          y={y0 + H - 2}
+          fontSize={FONT}
+          fontWeight={600}
+          fill={CHART.textSecondary}
+          stroke={CHART.surface}
+          strokeWidth={3}
+          paintOrder="stroke"
+          style={{ pointerEvents: "none" }}
+        >
+          {text}
+        </text>
+      );
+    }
+    return null;
+  };
+  Comp.displayName = "BubbleLabel";
+  return Comp;
+}

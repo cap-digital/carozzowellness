@@ -18,6 +18,7 @@ import {
   LabelList,
 } from "recharts";
 import { useData } from "@/components/providers/DataProvider";
+import { bubbleLabel } from "@/components/charts/labels";
 import { Loadable, Reveal } from "@/components/ui/Loadable";
 import { ChartCard, SectionTitle, Card } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/Segmented";
@@ -110,7 +111,10 @@ function Criativos() {
           name: c.ad,
           format: c.format,
           color: FORMAT_COLOR[c.format] ?? "#888",
-        })),
+        }))
+        // Biggest first: the bubbles that matter most claim label space first,
+        // and small bubbles are drawn on top of large ones instead of hidden.
+        .sort((a, b) => b.z - a.z),
     [creatives]
   );
 
@@ -285,13 +289,8 @@ function Criativos() {
                   {scatter.map((s, i) => (
                     <Cell key={i} fill={s.color} fillOpacity={0.72} stroke={s.color} />
                   ))}
-                  <LabelList
-                    dataKey="name"
-                    position="top"
-                    offset={8}
-                    formatter={(v: any) => String(v ?? "").split(" - ")[0]}
-                    style={{ fontSize: 10, fill: CHART.textSecondary, fontWeight: 600, stroke: CHART.surface, strokeWidth: 3, paintOrder: "stroke" }}
-                  />
+                  {/* Ad code only ("AD 03", "[CW] AD 01"); the full name is in the tooltip. */}
+                  <LabelList dataKey="name" content={bubbleLabel((v) => String(v ?? "").split(" - ")[0].trim())} />
                 </Scatter>
               </ScatterChart>
             </ResponsiveContainer>
