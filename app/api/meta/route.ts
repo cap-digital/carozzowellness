@@ -2,10 +2,18 @@ import { NextResponse } from "next/server";
 import { revalidateTag, unstable_cache } from "next/cache";
 import type { ApiResponse } from "@/lib/types";
 import { encodeMeta, type MetaCompact } from "@/lib/compact";
+import { fetchMetaRows, metaApiConfigured } from "@/lib/metaApi";
 
-// Server-side proxy to the Carozzo Wellness Supabase edge function.
+// Meta layer for the dashboard.
 //
-// Two upstream problems this route exists to absorb:
+// SOURCE: the Meta Marketing API directly (lib/metaApi.ts) whenever
+// META_ACCESS_TOKEN is set. It returns the same rows the sheet did, so nothing
+// downstream changes. Without the token (e.g. an environment that hasn't been
+// configured yet) it falls back to the legacy chain below — Google Sheet →
+// Apps Script → Supabase edge function — so the dashboard never goes dark
+// during the switch-over.
+//
+// Two upstream problems the legacy path taught this route to absorb:
 //  1. Size — upstream returns ~26 MB, well past Vercel's 4.5 MB response limit,
 //     which is exactly what surfaced as "HTTP 502" on the dashboard. We
 //     dictionary-encode it down to ~1 MB before it ever leaves this function.
@@ -31,6 +39,14 @@ let memo: { at: number; body: MetaCompact } | null = null;
 let inflight: Promise<MetaCompact> | null = null;
 
 async function fetchUpstream(): Promise<MetaCompact> {
+  if (metaApiConfigured()) {
+    const rows = await fetchMetaRows();
+    return encodeMeta(rows, new Date().toISOString(), 0);
+  }
+  return fetchLegacy();
+}
+
+async function fetchLegacy(): Promise<MetaCompact> {
   const res = await fetch(ENDPOINT, {
     method: "POST",
     headers: {
@@ -71,7 +87,7 @@ type UpstreamCompact = Omit<MetaCompact, "programatica"> & { format?: string; pr
 // a cold start doesn't mean another 30s+ round trip. The RAW response is way too
 // big to cache, but the ENCODED payload (~1 MB) fits the 2 MB entry limit.
 const CACHE_TAG = "carozzo-meta";
-const cachedUpstream = unstable_cache(fetchUpstream, ["carozzo-meta-v1"], {
+const cachedUpstream = unstable_cache(fetchUpstream, ["carozzo-meta-v2-api"], {
   revalidate: TTL_SECONDS,
   tags: [CACHE_TAG],
 });

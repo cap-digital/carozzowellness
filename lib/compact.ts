@@ -120,6 +120,11 @@ export function encodeMeta(raw: MetaRow[], timestamp: string, programatica = 0):
       // exact to the cent, while trimming float noise off the wire.
       row.push(n === 0 ? 0 : Math.round(n * 1e4) / 1e4);
     }
+    // Trailing zeros carry no information (expandMeta reads a missing column as
+    // 0) and most rows end in a run of them — non-video ads have no quartiles,
+    // most rows have no conversions. Dropping them keeps the payload well under
+    // the 2 MB Data Cache entry limit as the date range keeps growing.
+    while (row.length > DIM_COUNT && row[row.length - 1] === 0) row.pop();
     rows.push(row);
   }
 
