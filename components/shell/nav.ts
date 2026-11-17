@@ -6,6 +6,7 @@ import {
   Calculator,
   Search,
   MonitorPlay,
+  FileText,
   type LucideIcon,
 } from "lucide-react";
 
@@ -44,5 +45,9 @@ export const NAV: NavSection[] = [
       { href: "/campanhas", label: "Campanhas", icon: Megaphone, color: "#e56a2b" },
       { href: "/custos", label: "Custos & Taxas", icon: Calculator, color: "#b08a3e" },
     ],
+  },
+  {
+    title: "Relatórios",
+    items: [{ href: "/report", label: "Gerar Report", icon: FileText, color: "#c9a463" }],
   },
 ];

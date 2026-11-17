@@ -86,3 +86,22 @@ body {
     );
   background-size: 22px 22px;
 }
+
+/* ---- Report PDF (window.print) -----------------------------------------
+   The report renders a print copy into #report-print (a portal on <body>);
+   on paper the app shell disappears and only that copy is laid out, one
+   .report-sheet per A4 page. */
+#report-print { display: none; }
+@media print {
+  @page { size: A4; margin: 0; }
+  html, body { background: #fff !important; }
+  .app-shell { display: none !important; }
+  #report-print { display: block; }
+  #report-print, #report-print * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .report-sheet { box-shadow: none !important; margin: 0 !important; border-radius: 0 !important; break-after: page; }
+  .report-sheet:last-child { break-after: auto; }
+  .report-avoid { break-inside: avoid; }
+}

@@ -22,6 +22,7 @@ function useTitle() {
 
 export function Topbar({ onMenu }: { onMenu: () => void }) {
   const { title } = useTitle();
+  const ownPeriod = usePathname().startsWith("/report");
   const { range, setRange, activeDates, updatedAt, refresh, loading } = useData();
 
   const period =
@@ -46,13 +47,15 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
           <h1 className="truncate font-display text-[19px] font-semibold leading-tight tracking-tight text-[var(--text-primary)] sm:text-[22px]">
             {title}
           </h1>
-          <div className="mt-0.5 hidden items-center gap-1.5 text-[12px] text-[var(--text-muted)] sm:flex">
-            <CalendarRange size={13} />
-            <span>{period}</span>
-          </div>
+          {!ownPeriod && (
+            <div className="mt-0.5 hidden items-center gap-1.5 text-[12px] text-[var(--text-muted)] sm:flex">
+              <CalendarRange size={13} />
+              <span>{period}</span>
+            </div>
+          )}
         </div>
 
-        <div className="hidden items-center gap-2 md:flex">
+        <div className={ownPeriod ? "hidden" : "hidden items-center gap-2 md:flex"}>
           <Segmented
             size="sm"
             value={range}
@@ -74,7 +77,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
       </div>
 
       {/* Mobile range filter row */}
-      <div className="flex items-center gap-2 px-4 pb-2.5 md:hidden">
+      <div className={ownPeriod ? "hidden" : "flex items-center gap-2 px-4 pb-2.5 md:hidden"}>
         <div className="overflow-x-auto no-scrollbar">
           <Segmented
             size="sm"

@@ -26,6 +26,7 @@ interface Ctx {
   loading: boolean;
   error: string | null;
   allRows: Row[];
+  allGadsRows: GAdsRow[]; // Google Search + YouTube, unfiltered (the report picks its own period)
   rows: Row[]; // Meta rows filtered by range (edge function)
   googleSearchRows: GAdsRow[]; // Google Search (Ads API), filtered by range
   youtubeRows: GAdsRow[]; // YouTube (Ads API), filtered by range
@@ -161,6 +162,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     loading,
     error,
     allRows,
+    allGadsRows: gadsRows,
     rows,
     googleSearchRows,
     youtubeRows,

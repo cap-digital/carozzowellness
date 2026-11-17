@@ -10,7 +10,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <DataProvider>
-      <div className="min-h-screen page-grain">
+      <div className="app-shell min-h-screen page-grain">
         <Sidebar />
         <MobileSidebar open={menuOpen} onClose={() => setMenuOpen(false)} />
         <div className="lg:pl-[264px]">
