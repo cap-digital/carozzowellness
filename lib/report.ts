@@ -36,8 +36,26 @@ export interface ReportModel {
   conversions: (ConversionStat & { prevCount: number | null; prevCost: number | null })[];
   creatives: ReturnType<typeof adBreakdown>;
   ages: { age: string; impressions: number; share: number; ctr: number; spend: number }[];
-  analysis: { paragraphs: string[]; highlights: string[] };
+  efficiency: Efficiency | null; // vs the previous period; null without one
+  analysis: { paragraphs: string[]; highlights: string[]; efficiency: string | null };
   empty: boolean;
+}
+
+/**
+ * Results vs investment. The one place the report SUMS conversion actions
+ * ("contatos" = WhatsApp + every lead type) — approved for this comparison
+ * only, and always shown next to the per-action breakdown.
+ */
+export interface Efficiency {
+  spend: { now: number; prev: number; change: number }; // change in %
+  contacts: { now: number; prev: number; change: number };
+  costPerContact: { now: number; prev: number; change: number }; // total spend ÷ contacts
+  perThousand: { now: number; prev: number }; // contacts per R$ 1.000 invested
+  // Same ratio on the conversion campaigns' own spend — separates "the campaigns
+  // got better" from "more budget was moved to them".
+  convShare: { now: number; prev: number }; // % of total spend in conversion campaigns
+  convCostPerContact: { now: number; prev: number; change: number };
+  actions: { key: string; label: string; color: string; now: number; prev: number; change: number | null }[];
 }
 
 const inP = (p: ReportPeriod) => (d: string) => isValidDate(d) && d >= p.start && d <= p.end;
@@ -117,11 +135,37 @@ export function buildReport(allRows: Row[], allGads: GAdsRow[], period: ReportPe
   const impressions = meta.impressions + google.impressions + youtube.impressions;
   const clicks = meta.linkClicks + google.clicks + youtube.clicks;
 
+  // ---- efficiency (results vs investment) ----
+  let efficiency: Efficiency | null = null;
+  if (hasPrev) {
+    const contactsNow = conversions.reduce((a, c) => a + c.count, 0);
+    const contactsPrev = conversions.reduce((a, c) => a + (c.prevCount ?? 0), 0);
+    const convSpend = (rs: Row[]) => objectiveBreakdown(rs).filter((o) => o.primary?.isConversion).reduce((a, o) => a + o.totals.spend, 0);
+    const csNow = convSpend(rows), csPrev = convSpend(prevRows);
+    const pc = (a: number, b: number) => (b > 0 ? ((a - b) / b) * 100 : 0);
+    if (contactsPrev > 0 && contactsNow > 0) {
+      const cpcNow = spend.total / contactsNow, cpcPrev = prevTotal / contactsPrev;
+      const ccNow = csNow / contactsNow, ccPrev = csPrev / contactsPrev;
+      efficiency = {
+        spend: { now: spend.total, prev: prevTotal, change: pc(spend.total, prevTotal) },
+        contacts: { now: contactsNow, prev: contactsPrev, change: pc(contactsNow, contactsPrev) },
+        costPerContact: { now: cpcNow, prev: cpcPrev, change: pc(cpcNow, cpcPrev) },
+        perThousand: { now: (contactsNow / spend.total) * 1000, prev: (contactsPrev / prevTotal) * 1000 },
+        convShare: { now: div(csNow, spend.total) * 100, prev: div(csPrev, prevTotal) * 100 },
+        convCostPerContact: { now: ccNow, prev: ccPrev, change: pc(ccNow, ccPrev) },
+        actions: conversions
+          .filter((c) => c.count > 0 || (c.prevCount ?? 0) > 0)
+          .map((c) => ({ key: c.key, label: c.label, color: c.color, now: c.count, prev: c.prevCount ?? 0, change: c.prevCount ? pc(c.count, c.prevCount) : null })),
+      };
+    }
+  }
+
   const model: ReportModel = {
     period, days, prev: hasPrev ? prevP : null,
     meta, metaD, google, googleD, youtube, youtubeD,
     spend, prevSpend, impressions, clicks, daily, objectives, conversions, creatives, ages,
-    analysis: { paragraphs: [], highlights: [] },
+    efficiency,
+    analysis: { paragraphs: [], highlights: [], efficiency: null },
     empty: spend.total === 0 && impressions === 0,
   };
   model.analysis = writeAnalysis(model, { meta: pMeta, google: pGoogle, youtube: pYt });
@@ -132,7 +176,7 @@ export function buildReport(allRows: Row[], allGads: GAdsRow[], period: ReportPe
 function writeAnalysis(m: ReportModel, prev: { meta: Totals; google: GAdsTotals; youtube: GAdsTotals }) {
   const paragraphs: string[] = [];
   const highlights: string[] = [];
-  if (m.empty) return { paragraphs: ["Não houve veiculação no período selecionado."], highlights };
+  if (m.empty) return { paragraphs: ["Não houve veiculação no período selecionado."], highlights, efficiency: null };
 
   const share = (v: number) => pct(div(v, m.spend.total) * 100, 0);
   const prevLabel = m.prev ? `os ${m.days} dias anteriores (${periodLabel(m.prev)})` : "";
@@ -239,7 +283,46 @@ function writeAnalysis(m: ReportModel, prev: { meta: Totals; google: GAdsTotals;
 
   if (cs && Math.abs(cs.v) >= 10) highlights.unshift(`Investimento total ${arrow(cs.v)} ${Math.abs(cs.v).toFixed(0)}% (${brl(m.prevSpend!.total)} → ${brl(m.spend.total)})`);
   if (!m.prev) highlights.push("Sem período anterior com veiculação para comparação.");
-  return { paragraphs, highlights };
+  return { paragraphs, highlights, efficiency: m.efficiency ? writeEfficiency(m.efficiency) : null };
+}
+
+// One tight paragraph: what happened, how much better/worse per real, and WHY
+// (campaigns got cheaper vs. budget moved to them). Each clause is conditional
+// on the numbers, so it reads right whether the period improved or not.
+function writeEfficiency(e: Efficiency): string {
+  const p = (v: number) => `${Math.abs(v).toFixed(0)}%`;
+  const dir = (v: number) => (v >= 0 ? "alta" : "queda");
+  const k = (v: number) => (v >= 1000 ? `R$ ${(v / 1000).toFixed(1).replace(".", ",")} mil` : brl(v));
+  const s: string[] = [];
+
+  // 1. The headline relation between the two variables.
+  const spendTxt = Math.abs(e.spend.change) < 1 ? "com investimento estável" : `com ${dir(e.spend.change)} de ${p(e.spend.change)} no investimento (${k(e.spend.prev)} → ${k(e.spend.now)})`;
+  const contactsTxt = Math.abs(e.contacts.change) < 1
+    ? `o volume de contatos (WhatsApp + leads) se manteve em ${int(e.contacts.now)}`
+    : `o volume de contatos (WhatsApp + leads) teve ${dir(e.contacts.change)} de ${p(e.contacts.change)} (${int(e.contacts.prev)} → ${int(e.contacts.now)})`;
+  let head = `${spendTxt[0].toUpperCase()}${spendTxt.slice(1)}, ${contactsTxt}`;
+  if (e.spend.change > 1 && e.contacts.change > e.spend.change * 1.2) head += ` — os resultados cresceram ${(e.contacts.change / e.spend.change).toFixed(1).replace(".", ",")} vezes mais rápido que a verba`;
+  else if (e.spend.change < -1 && e.contacts.change > 1) head += " — mais resultados com menos verba";
+  s.push(head + ".");
+
+  // 2. What that means per real invested.
+  s.push(
+    `Cada R$ 1.000 investidos passou a gerar ${e.perThousand.now.toFixed(0)} contatos, contra ${e.perThousand.prev.toFixed(0)} no período anterior, e o custo por contato foi de ${brl(e.costPerContact.prev)} para ${brl(e.costPerContact.now)} (${e.costPerContact.change <= 0 ? "−" : "+"}${p(e.costPerContact.change)}).`
+  );
+
+  // 3. Where the gain came from: mix shift vs. the campaigns themselves.
+  const shareMoved = e.convShare.now - e.convShare.prev;
+  const mix = Math.abs(shareMoved) >= 3
+    ? `A fatia do investimento nas campanhas de conversão foi de ${pct(e.convShare.prev, 0)} para ${pct(e.convShare.now, 0)}`
+    : `A fatia do investimento nas campanhas de conversão ficou estável (${pct(e.convShare.now, 0)})`;
+  const moved = Math.abs(shareMoved) >= 3;
+  const own = e.convCostPerContact.change <= -5
+    ? `${moved ? "mas, mesmo olhando só o gasto delas," : "e, olhando só o gasto delas,"} o custo por contato caiu ${p(e.convCostPerContact.change)} (${brl(e.convCostPerContact.prev)} → ${brl(e.convCostPerContact.now)}) — o ganho vem da eficiência das próprias campanhas${moved ? ", não só da redistribuição de verba" : ""}`
+    : e.convCostPerContact.change >= 5
+    ? `e, olhando só o gasto delas, o custo por contato subiu ${p(e.convCostPerContact.change)} (${brl(e.convCostPerContact.prev)} → ${brl(e.convCostPerContact.now)}) — ${moved ? "o resultado geral se explica pela realocação de verba, não por campanhas mais baratas" : "as campanhas de conversão ficaram mais caras no período"}`
+    : `e, olhando só o gasto delas, o custo por contato ficou praticamente igual (${brl(e.convCostPerContact.now)})${moved ? " — o movimento vem sobretudo da realocação de verba" : ""}`;
+  s.push(`${mix}, ${own}.`);
+  return s.join(" ");
 }
 
 // "AD 03 - Carozzo Wellness - Animação 15\"" → "AD 03 · Animação 15\""

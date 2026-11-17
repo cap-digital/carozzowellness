@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight, Eye, FileDown, Info, Loader2 } from "lucide-
 import { useData } from "@/components/providers/DataProvider";
 import { Loadable } from "@/components/ui/Loadable";
 import { Card } from "@/components/ui/Card";
-import { ReportDocument, REPORT_PAGES } from "@/components/report/ReportDocument";
+import { ReportDocument, reportPageCount } from "@/components/report/ReportDocument";
 import { buildReport, periodLabel, type ReportPeriod } from "@/lib/report";
 import { shiftIso, todayIso, isValidDate } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -52,7 +52,10 @@ function Report() {
   const previewRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
   const [page, setPage] = useState(1);
-  const go = (d: number) => setPage((p) => Math.min(REPORT_PAGES, Math.max(1, p + d)));
+  const totalPages = reportPageCount(text);
+  const go = (d: number) => setPage((p) => Math.min(totalPages, Math.max(1, p + d)));
+  // Clearing the analysis drops a sheet — don't leave the preview past the end.
+  useEffect(() => setPage((p) => Math.min(p, totalPages)), [totalPages]);
 
   // ← → flip pages while the preview is open (not while typing the analysis).
   useEffect(() => {
@@ -60,12 +63,12 @@ function Report() {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
       if (t.tagName === "TEXTAREA" || t.tagName === "INPUT") return;
-      if (e.key === "ArrowLeft") go(-1);
-      if (e.key === "ArrowRight") go(1);
+      const d = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0;
+      if (d) setPage((p) => Math.min(totalPages, Math.max(1, p + d)));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [shown]);
+  }, [shown, totalPages]);
 
   // Unsent analysis survives a reload (per-browser convenience only).
   useEffect(() => {
@@ -236,7 +239,7 @@ function Report() {
             <div className="mb-3 flex items-center justify-center gap-3">
               <PageButton onClick={() => go(-1)} disabled={page === 1} label="Página anterior"><ChevronLeft size={18} /></PageButton>
               <div className="flex items-center gap-1.5">
-                {Array.from({ length: REPORT_PAGES }, (_, i) => i + 1).map((n) => (
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
                   <button
                     key={n}
                     onClick={() => setPage(n)}
@@ -246,9 +249,9 @@ function Report() {
                 ))}
               </div>
               <span className="min-w-[92px] text-center text-[12.5px] font-medium tnum text-[var(--text-secondary)]">
-                Página {page} de {REPORT_PAGES}
+                Página {page} de {totalPages}
               </span>
-              <PageButton onClick={() => go(1)} disabled={page === REPORT_PAGES} label="Próxima página"><ChevronRight size={18} /></PageButton>
+              <PageButton onClick={() => go(1)} disabled={page === totalPages} label="Próxima página"><ChevronRight size={18} /></PageButton>
             </div>
             <div style={{ zoom }}>
               <ReportDocument model={model} analysis={deferredText} page={page} />

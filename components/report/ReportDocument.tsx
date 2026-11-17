@@ -7,6 +7,8 @@ import { periodLabel, shortAd } from "@/lib/report";
 import { brl, int, pct, compact, shortDate } from "@/lib/format";
 import { capLabel } from "@/components/charts/labels";
 import { OBJECTIVE_COLOR } from "@/lib/theme";
+import { ExternalLink } from "lucide-react";
+import type { Efficiency } from "@/lib/report";
 
 // The report as A4 sheets (794 × 1123 px at 96 dpi). The same component is the
 // on-screen preview and the print copy, so what you see is what the PDF gets.
@@ -33,7 +35,7 @@ const C = {
 const PLATFORM = { meta: "#2f80c4", google: "#e0a010", youtube: "#cf3a5f" };
 
 /** Number of A4 sheets the document renders (cover included). */
-export const REPORT_PAGES = 5;
+export const reportPageCount = (analysis: string) => (analysis.trim() ? 6 : 5);
 
 // When set, only that sheet renders (paginated preview). The print copy leaves
 // it unset and gets every sheet.
@@ -126,7 +128,48 @@ function ReportSheets({ model, analysis }: { model: ReportModel; analysis: strin
   const userText = analysis.trim();
   const userParas = userText ? userText.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean) : [];
   const generatedAt = new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
-  const total = REPORT_PAGES;
+  // With the team's text the analysis takes two sheets (it would overflow one);
+  // later sheets shift by one and the page count follows.
+  const split = userParas.length > 0;
+  const total = reportPageCount(analysis);
+  const after = split ? 1 : 0;
+
+  const teamBox = (
+    <div className="report-avoid mb-6 rounded-xl px-5 py-4" style={{ background: C.cream, borderLeft: `3px solid ${C.gold}` }}>
+      <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: C.gold }}>Análise da equipe</div>
+      <div className="space-y-3">
+        {userParas.map((p, i) => (
+          <p key={i} className="whitespace-pre-line text-[12.5px] leading-[1.65]" style={{ color: C.ink }}>{p}</p>
+        ))}
+      </div>
+    </div>
+  );
+  const highlightsBox = m.analysis.highlights.length > 0 && (
+    <div className="report-avoid mb-6">
+      <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: C.forestMid }}>Destaques dos dados</div>
+      <ul className="grid grid-cols-2 gap-2">
+        {m.analysis.highlights.map((h, i) => (
+          <li key={i} className="flex gap-2 rounded-lg px-3 py-2 text-[11.5px] leading-snug" style={{ background: "#fff", border: `1px solid ${C.line}`, color: C.ink }}>
+            <span className="mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: C.gold }} />
+            {h}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+  const efficiencyBox = m.analysis.efficiency && (
+    <div className="report-avoid mb-6 rounded-xl px-5 py-4" style={{ background: "#fff", border: `1px solid ${C.line}`, borderLeft: `3px solid ${C.forestMid}` }}>
+      <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: C.forestMid }}>Eficiência do investimento</div>
+      <p className="text-[12.5px] leading-[1.7]" style={{ color: C.ink }}>{m.analysis.efficiency}</p>
+    </div>
+  );
+  const paragraphsBox = (
+    <div className="space-y-3">
+      {m.analysis.paragraphs.map((p, i) => (
+        <p key={i} className="report-avoid text-[12.5px] leading-[1.7]" style={{ color: C.ink }}>{p}</p>
+      ))}
+    </div>
+  );
 
   const platforms = [
     { key: "meta", label: "Meta Ads", v: m.spend.meta, prev: m.prevSpend?.meta, color: PLATFORM.meta },
@@ -235,48 +278,36 @@ function ReportSheets({ model, analysis }: { model: ReportModel; analysis: strin
           Cada ação é medida na sua própria campanha (custo = investimento dessa campanha ÷ resultados; taxa = resultados ÷ cliques no link). As ações não são somadas.
           {m.prev && ` Comparação com ${periodLabel(m.prev)}.`}
         </p>
+
+        {m.efficiency && <EfficiencyBlock e={m.efficiency} />}
       </Sheet>
 
       {/* 3 — Analysis (user's qualitative text merged with the data reading) */}
-      <Sheet page={3} total={total} period={period}>
-        <H2 kicker="Análise">{userParas.length ? "Leitura do período" : "Leitura dos dados"}</H2>
-        {userParas.length > 0 && (
-          <div className="report-avoid mb-6 rounded-xl px-5 py-4" style={{ background: C.cream, borderLeft: `3px solid ${C.gold}` }}>
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: C.gold }}>Análise da equipe</div>
-            <div className="space-y-3">
-              {userParas.map((p, i) => (
-                <p key={i} className="whitespace-pre-line text-[12.5px] leading-[1.65]" style={{ color: C.ink }}>{p}</p>
-              ))}
-            </div>
-          </div>
-        )}
-        {m.analysis.highlights.length > 0 && (
-          <div className="report-avoid mb-6">
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: C.forestMid }}>Destaques dos dados</div>
-            <ul className="grid grid-cols-2 gap-2">
-              {m.analysis.highlights.map((h, i) => (
-                <li key={i} className="flex gap-2 rounded-lg px-3 py-2 text-[11.5px] leading-snug" style={{ background: "#fff", border: `1px solid ${C.line}`, color: C.ink }}>
-                  <span className="mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: C.gold }} />
-                  {h}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        <div>
-          {userParas.length > 0 && (
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: C.forestMid }}>O que os números mostram</div>
-          )}
-          <div className="space-y-3">
-            {m.analysis.paragraphs.map((p, i) => (
-              <p key={i} className="report-avoid text-[12.5px] leading-[1.7]" style={{ color: C.ink }}>{p}</p>
-            ))}
-          </div>
-        </div>
-      </Sheet>
+      {split ? (
+        <>
+          {/* Team text + efficiency on one sheet; the data reading on the next. */}
+          <Sheet page={3} total={total} period={period}>
+            <H2 kicker="Análise">Leitura do período</H2>
+            {teamBox}
+            {efficiencyBox}
+          </Sheet>
+          <Sheet page={4} total={total} period={period}>
+            <H2 kicker="Análise">O que os números mostram</H2>
+            {highlightsBox}
+            {paragraphsBox}
+          </Sheet>
+        </>
+      ) : (
+        <Sheet page={3} total={total} period={period}>
+          <H2 kicker="Análise">Leitura dos dados</H2>
+          {highlightsBox}
+          {efficiencyBox}
+          {paragraphsBox}
+        </Sheet>
+      )}
 
       {/* 4 — Investment & campaigns */}
-      <Sheet page={4} total={total} period={period}>
+      <Sheet page={4 + after} total={total} period={period}>
         <H2 kicker="Investimento">Ritmo de veiculação e campanhas</H2>
         <div className="report-avoid rounded-xl p-3" style={{ background: "#fff", border: `1px solid ${C.line}` }}>
           <div className="mb-1 px-1 text-[11px] font-semibold" style={{ color: C.ink }}>Investimento diário por plataforma</div>
@@ -335,7 +366,7 @@ function ReportSheets({ model, analysis }: { model: ReportModel; analysis: strin
       </Sheet>
 
       {/* 5 — Platforms, creatives, audience */}
-      <Sheet page={5} total={total} period={period}>
+      <Sheet page={5 + after} total={total} period={period}>
         <H2 kicker="Canais, criativos e público">Onde e com quem a mídia rendeu</H2>
         <div className="grid grid-cols-2 gap-3">
           <div className="report-avoid rounded-xl p-4" style={{ background: "#fff", border: `1px solid ${C.line}`, borderTop: `3px solid ${PLATFORM.google}` }}>
@@ -366,21 +397,36 @@ function ReportSheets({ model, analysis }: { model: ReportModel; analysis: strin
             <div key={c.ad} className="report-avoid flex items-center gap-3 rounded-lg px-3 py-2" style={{ background: "#fff", border: `1px solid ${C.line}` }}>
               <span className="w-4 text-[11px] font-semibold" style={{ color: C.gold }}>{i + 1}</span>
               {c.thumb ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={c.thumb} alt="" className="h-11 w-11 shrink-0 rounded-md object-cover" referrerPolicy="no-referrer" />
+                <a href={c.permalink || undefined} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={c.thumb} alt="" className="h-14 w-14 rounded-md object-cover" referrerPolicy="no-referrer" />
+                </a>
               ) : (
-                <div className="h-11 w-11 shrink-0 rounded-md" style={{ background: C.cream }} />
+                <div className="h-14 w-14 shrink-0 rounded-md" style={{ background: C.cream }} />
               )}
               <div className="min-w-0 flex-1">
                 <div className="text-[11.5px] font-semibold leading-snug" style={{ color: C.ink }}>{shortAd(c.ad)}</div>
                 <div className="text-[10px]" style={{ color: C.muted }}>{c.format} · {c.objective}</div>
               </div>
               {[["Investido", brl(c.totals.spend, 0)], ["CTR", pct(c.derived.ctrLink)], ["Cliques", int(c.totals.linkClicks)], [c.primary?.short ?? "Resultado", c.primaryValue >= 100000 ? compact(c.primaryValue) : int(c.primaryValue)]].map(([l, v]) => (
-                <div key={l} className="w-[74px] text-right">
-                  <div className="text-[9px] uppercase tracking-[0.08em]" style={{ color: C.muted }}>{l}</div>
+                <div key={l} className="w-[66px] text-right">
+                  <div className="whitespace-nowrap text-[9px] uppercase tracking-[0.06em]" style={{ color: C.muted }}>{l}</div>
                   <div className="text-[12px] font-semibold tnum" style={{ color: C.ink }}>{v}</div>
                 </div>
               ))}
+              {c.permalink ? (
+                <a
+                  href={c.permalink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-1 inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold"
+                  style={{ border: `1px solid ${C.line}`, color: C.forest, background: C.cream }}
+                >
+                  Ver post <ExternalLink size={10} />
+                </a>
+              ) : (
+                <span className="ml-1 w-[68px]" />
+              )}
             </div>
           ))}
           {!creatives.length && <div className="text-[11px]" style={{ color: C.muted }}>Sem criativos com veiculação no período.</div>}
@@ -404,6 +450,65 @@ function ReportSheets({ model, analysis }: { model: ReportModel; analysis: strin
           </div>
         )}
       </Sheet>
+    </div>
+  );
+}
+
+// Investment vs contacts, indexed to the previous period (= 100), plus what that
+// means per real. The ONLY place conversion actions are summed — the per-action
+// counts sit right beside the total so nothing is hidden by it.
+function EfficiencyBlock({ e }: { e: Efficiency }) {
+  const idx = (now: number, prev: number) => (prev > 0 ? (now / prev) * 100 : 0);
+  const bars = [
+    { label: "Investimento", v: idx(e.spend.now, e.spend.prev), color: C.gold, detail: `${brl(e.spend.prev, 0)} → ${brl(e.spend.now, 0)}` },
+    { label: "Contatos (WhatsApp + leads)", v: idx(e.contacts.now, e.contacts.prev), color: C.forestMid, detail: `${int(e.contacts.prev)} → ${int(e.contacts.now)}` },
+  ];
+  const max = Math.max(100, ...bars.map((b) => b.v)) * 1.08;
+  const signed = (v: number) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(0)}%`;
+  const stats: [string, string, number | null][] = [
+    ["Contatos por R$ 1.000", `${e.perThousand.prev.toFixed(0)} → ${e.perThousand.now.toFixed(0)}`, null],
+    ["Custo por contato", `${brl(e.costPerContact.prev)} → ${brl(e.costPerContact.now)}`, e.costPerContact.change],
+    ["Só nas campanhas de conversão", `${brl(e.convCostPerContact.prev)} → ${brl(e.convCostPerContact.now)}`, e.convCostPerContact.change],
+  ];
+  return (
+    <div className="report-avoid mt-6">
+      <h3 className="mb-2 font-display text-[16px] font-semibold" style={{ color: C.forest }}>Eficiência do investimento</h3>
+      <div className="rounded-xl p-4" style={{ background: "#fff", border: `1px solid ${C.line}` }}>
+        <div className="text-[10px]" style={{ color: C.muted }}>Variação vs período anterior (traço = período anterior, índice 100)</div>
+        <div className="mt-2 space-y-2.5">
+          {bars.map((b) => (
+            <div key={b.label} className="flex items-center gap-3">
+              <span className="w-[170px] whitespace-nowrap text-[11px]" style={{ color: C.ink }}>{b.label}</span>
+              <div className="relative h-5 flex-1 rounded" style={{ background: C.cream }}>
+                <div className="h-5 rounded" style={{ width: `${(b.v / max) * 100}%`, background: b.color }} />
+                <div className="absolute top-[-3px] h-[26px] w-px" style={{ left: `${(100 / max) * 100}%`, background: C.ink2 }} />
+              </div>
+              <span className="w-[54px] text-right text-[12px] font-semibold tnum" style={{ color: C.ink }}>{signed(b.v - 100)}</span>
+              <span className="w-[120px] text-right text-[10px] tnum" style={{ color: C.ink2 }}>{b.detail}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 grid grid-cols-3 gap-3 border-t pt-3" style={{ borderColor: C.line }}>
+          {stats.map(([l, v, ch]) => (
+            <div key={l}>
+              <div className="text-[9.5px] uppercase tracking-[0.1em]" style={{ color: C.muted }}>{l}</div>
+              <div className="mt-0.5 text-[12.5px] font-semibold tnum" style={{ color: C.ink }}>
+                {v} {ch != null && <span className="text-[10.5px]" style={{ color: ch <= 0 ? "#2f7a1f" : C.wine }}>{signed(ch)}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[10px]" style={{ color: C.ink2 }}>
+          <span style={{ color: C.muted }}>Por ação:</span>
+          {e.actions.map((a) => (
+            <span key={a.key} className="inline-flex items-center gap-1.5 tnum">
+              <span className="h-2 w-2 rounded-[2px]" style={{ background: a.color }} />
+              {a.label} {int(a.prev)} → {int(a.now)}
+              {a.change != null && <span style={{ color: a.change >= 0 ? "#2f7a1f" : C.wine }}>({signed(a.change)})</span>}
+            </span>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
